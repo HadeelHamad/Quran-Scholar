@@ -16,10 +16,35 @@ class TaskStatus(str, Enum):
 
 
 class ClaimSupport(str, Enum):
+    """Legacy alias levels — prefer VerificationLevel for new code."""
+
     SUPPORTED = "supported"
     PARTIAL = "partial"
     UNSUPPORTED = "unsupported"
     UNKNOWN = "unknown"
+
+
+class VerificationLevel(str, Enum):
+    DIRECT = "DIRECT"
+    SUPPORTED_SYNTHESIS = "SUPPORTED_SYNTHESIS"
+    UNSUPPORTED = "UNSUPPORTED"
+    CONFLICTING = "CONFLICTING"
+
+
+class ClaimType(str, Enum):
+    DIRECT_FACT = "direct_fact"
+    SYNTHESIS = "synthesis"
+    COMPARISON = "comparison"
+    INTERPRETATION = "interpretation"
+    OTHER = "other"
+
+
+class ClaimVerificationStatus(str, Enum):
+    PENDING = "pending"
+    DIRECT = "DIRECT"
+    SUPPORTED_SYNTHESIS = "SUPPORTED_SYNTHESIS"
+    UNSUPPORTED = "UNSUPPORTED"
+    CONFLICTING = "CONFLICTING"
 
 
 class QuestionFocus(str, Enum):
@@ -210,24 +235,45 @@ class Evidence(BaseModel):
 
 
 class Claim(BaseModel):
-    """A claim that must be grounded in evidence_items."""
+    """Auditable claim — must include non-empty evidence_ids."""
 
     id: str
-    text: str
-    evidence_ids: list[str] = Field(default_factory=list)
-    support: ClaimSupport = ClaimSupport.UNKNOWN
+    statement: str = Field(description="Claim text (auditable assertion)")
+    claim_type: ClaimType | str = ClaimType.DIRECT_FACT
+    evidence_ids: list[str] = Field(
+        min_length=1,
+        description="Required evidence ids — claims without evidence are rejected",
+    )
+    verification_status: ClaimVerificationStatus | str = ClaimVerificationStatus.PENDING
     notes: str | None = None
+
+    # Backward-compatible aliases
+    @property
+    def text(self) -> str:
+        return self.statement
+
+
+class ClaimVerdict(BaseModel):
+    """Per-claim verification outcome."""
+
+    claim_id: str
+    level: VerificationLevel
+    notes: str = ""
 
 
 class VerificationResult(BaseModel):
-    """Verifier node structured output."""
+    """Evidence Verifier output — stricter than the report generator."""
 
     passed: bool
-    score: float = Field(default=0.0, ge=0.0, le=1.0)
-    summary: str = ""
+    verified_claim_ids: list[str] = Field(default_factory=list)
     unsupported_claim_ids: list[str] = Field(default_factory=list)
-    missing_evidence_notes: list[str] = Field(default_factory=list)
+    conflicting_claim_ids: list[str] = Field(default_factory=list)
+    evidence_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
+    notes: list[str] = Field(default_factory=list)
+    verdicts: list[ClaimVerdict] = Field(default_factory=list)
+    # Kept for older call sites
     needs_more_research: bool = False
+    summary: str = ""
 
 
 ResearchAction = Literal[

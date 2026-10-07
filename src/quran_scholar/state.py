@@ -60,9 +60,9 @@ class ResearchState(TypedDict, total=False):
     findings: Annotated[list[Finding], operator.add]
     tafsir_comparisons: Annotated[list[TafsirComparison], operator.add]
 
-    # Evidence / claims (append)
+    # Evidence (append) / claims (replace — extractor + verifier rewrite statuses)
     evidence_items: Annotated[list[Evidence], operator.add]
-    claims: Annotated[list[Claim], operator.add]
+    claims: list[Claim]
 
     # Verification (replace — current snapshot)
     verification_result: VerificationResult | None
