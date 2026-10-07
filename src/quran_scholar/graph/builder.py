@@ -20,9 +20,9 @@ from quran_scholar.nodes.researchers import (
     tafsir_researcher_node,
 )
 from quran_scholar.nodes.routing import (
-    route_after_evidence_verifier,
     route_after_gap_analyzer,
     route_after_research_manager,
+    verification_route,
 )
 from quran_scholar.state import ResearchState
 
@@ -89,9 +89,9 @@ def build_graph():
 
     graph.add_conditional_edges(
         "evidence_verifier",
-        route_after_evidence_verifier,
+        verification_route,
         {
-            "research_manager": "research_manager",
+            "gap_analyzer": "gap_analyzer",
             "report_generator": "report_generator",
         },
     )

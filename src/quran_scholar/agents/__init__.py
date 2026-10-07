@@ -8,6 +8,7 @@ from quran_scholar.agents.linguistic_researcher_agent import run_linguistic_rese
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.agents.planner_agent import plan_research
 from quran_scholar.agents.quran_researcher_agent import run_quran_research
+from quran_scholar.agents.report_generator_agent import run_report_generation
 from quran_scholar.agents.research_manager_agent import decide_next_action
 from quran_scholar.agents.tafsir_comparator_agent import run_tafsir_comparison
 from quran_scholar.agents.tafsir_researcher_agent import run_tafsir_research
@@ -24,6 +25,8 @@ __all__ = [
     "run_tafsir_comparison",
     "run_claim_extraction",
     "run_evidence_verification",
+    "run_report_generation",
 ]
+
 
 

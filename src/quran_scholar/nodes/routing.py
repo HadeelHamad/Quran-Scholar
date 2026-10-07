@@ -55,13 +55,19 @@ def route_after_gap_analyzer(state: ResearchState) -> str:
     return "research_manager"
 
 
-def route_after_evidence_verifier(state: ResearchState) -> str:
-    """Failed verification retries via Research Manager; pass → report."""
-    if state.get("verification_passed"):
+def verification_route(state: ResearchState) -> str:
+    """Deterministic post-verifier routing — verifier never chooses the route."""
+    result = state.get("verification_result")
+    if result is not None and getattr(result, "passed", False):
         return "report_generator"
 
     iteration = int(state.get("research_iteration") or 0)
     max_iters = int(state.get("max_research_iterations") or 3)
-    if iteration < max_iters:
-        return "research_manager"
-    return "report_generator"
+    if iteration >= max_iters:
+        return "report_generator"
+
+    return "gap_analyzer"
+
+
+# Alias kept for graph builder imports
+route_after_evidence_verifier = verification_route
