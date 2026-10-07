@@ -19,10 +19,8 @@ function setLoading(loading) {
 
 function renderBadges(data) {
   badgesEl.innerHTML = "";
-  if (data.verification_passed) {
-    badgesEl.appendChild(makeBadge("تم التحقق من الأدلة", "ok"));
-  } else if (data.research_complete) {
-    badgesEl.appendChild(makeBadge("اكتمل البحث — تحقق جزئي", "warn"));
+  if (data.research_complete) {
+    badgesEl.appendChild(makeBadge("اكتمل البحث", "ok"));
   }
 }
 

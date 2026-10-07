@@ -171,7 +171,7 @@ Trace lines look like:
 ## Design notes
 
 - One shared `ResearchState`; nodes return **only** fields they change.
-- Append reducers on evidence/claims/findings so iterations cannot wipe prior work.
+- Append reducers on evidence lists so iterations cannot wipe prior work.
 - Only researchers are named `*_agent` (LLM + tools). Planner/manager/gap/report use LLM or heuristics without tools.
 - Research loops via gap analyzer until the plan is satisfied or `max_research_iterations` is hit.
 

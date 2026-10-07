@@ -17,6 +17,7 @@ from quran_scholar.nodes.researchers import (
     quran_researcher_node,
     tafsir_researcher_node,
 )
+from quran_scholar.nodes.logging_wrap import with_state_logging
 from quran_scholar.nodes.routing import (
     route_after_gap_analyzer,
     route_after_research_manager,
@@ -39,12 +40,10 @@ def build_graph():
         "report_generator": report_generator_node,
     }
     for name, fn in nodes.items():
-        graph.add_node(name, fn)
+        graph.add_node(name, with_state_logging(name, fn))
 
     graph.add_edge(START, "planner")
     graph.add_edge("planner", "research_manager")
-    # Only list destinations the router can actually return (avoids fake self-loops
-    # and clutter in draw_mermaid / PNG diagrams).
     graph.add_conditional_edges(
         "research_manager",
         route_after_research_manager,

@@ -1,4 +1,4 @@
-"""Pydantic models for structured research outputs and evidence store items."""
+"""Pydantic models for research plans, evidence, and graph decisions."""
 
 from __future__ import annotations
 
@@ -15,29 +15,6 @@ class TaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class VerificationLevel(str, Enum):
-    DIRECT = "DIRECT"
-    SUPPORTED_SYNTHESIS = "SUPPORTED_SYNTHESIS"
-    UNSUPPORTED = "UNSUPPORTED"
-    CONFLICTING = "CONFLICTING"
-
-
-class ClaimType(str, Enum):
-    DIRECT_FACT = "direct_fact"
-    SYNTHESIS = "synthesis"
-    COMPARISON = "comparison"
-    INTERPRETATION = "interpretation"
-    OTHER = "other"
-
-
-class ClaimVerificationStatus(str, Enum):
-    PENDING = "pending"
-    DIRECT = "DIRECT"
-    SUPPORTED_SYNTHESIS = "SUPPORTED_SYNTHESIS"
-    UNSUPPORTED = "UNSUPPORTED"
-    CONFLICTING = "CONFLICTING"
-
-
 class QuestionFocus(str, Enum):
     VERSE_SPECIFIC = "verse_specific"
     THEMATIC = "thematic"
@@ -45,16 +22,11 @@ class QuestionFocus(str, Enum):
 
 
 class ExecutionPattern(str, Enum):
-    """Research Manager execution strategies (chosen dynamically)."""
+    """Research Manager execution strategies."""
 
     THEMATIC = "thematic"
-    """Quran → then parallel Linguistic ∥ Tafsir ∥ Context (when ready) → Gap."""
-
     VERSE_SPECIFIC = "verse_specific"
-    """Fetch ayah → Tafsir → optional Linguistic → optional Context → verify path."""
-
     TAFSIR_COMPARISON = "tafsir_comparison"
-    """Fetch ayah → Tafsir → Comparator → Verification."""
 
 
 class VerseRef(BaseModel):
@@ -70,10 +42,8 @@ class ResearchTask(BaseModel):
     description: str
     kind: str = Field(
         description=(
-            "Research step kind: fetch_ayah, quran_search, tafsir_fetch, "
-            "linguistic, nuzool (maps to graph researchers; do not use "
-            "verification or tafsir_comparison as task kinds — those are "
-            "downstream graph stages)"
+            "fetch_ayah | quran_search | tafsir_fetch | linguistic | nuzool "
+            "(maps to graph researchers)"
         )
     )
     status: TaskStatus = TaskStatus.PENDING
@@ -124,8 +94,7 @@ class ResearchPlan(BaseModel):
         default_factory=list,
         description=(
             "Tafsir MCP source ids when tafsir is needed (e.g. katheer, saadi). "
-            "Leave empty when the question does not need tafsir; runtime defaults apply "
-            "only if a tafsir task runs."
+            "Leave empty when tafsir is not needed."
         ),
     )
     primary_verse: VerseRef | None = Field(
@@ -135,7 +104,7 @@ class ResearchPlan(BaseModel):
 
 
 class VerseEvidence(BaseModel):
-    """Quranic verse retrieved via Tafsir MCP (e.g. fetch_ayah / search)."""
+    """Quranic verse retrieved via MCP (fetch_ayah / search)."""
 
     ref: VerseRef
     text_uthmani: str
@@ -145,7 +114,7 @@ class VerseEvidence(BaseModel):
 
 
 class TafsirEvidence(BaseModel):
-    """Tafsir excerpt with mandatory attribution."""
+    """Tafsir excerpt with attribution."""
 
     ref: VerseRef
     source_id: str = Field(description="MCP tafsir id, e.g. katheer, saadi")
@@ -158,7 +127,7 @@ class TafsirEvidence(BaseModel):
 
 
 class LinguisticEvidence(BaseModel):
-    """Word/root linguistic analysis from MCP tools (raw tool output, not LLM paraphrase)."""
+    """Word/root analysis from MCP tools."""
 
     query: str
     root: str | None = None
@@ -169,7 +138,7 @@ class LinguisticEvidence(BaseModel):
 
 
 class NuzoolEvidence(BaseModel):
-    """Asbab al-nuzool with explicit FOUND / NOT_AVAILABLE / ERROR status."""
+    """Asbab al-nuzool with FOUND / NOT_AVAILABLE / ERROR status."""
 
     status: Literal["FOUND", "NOT_AVAILABLE", "ERROR"]
     content: str | None = None
@@ -185,39 +154,21 @@ class NuzoolEvidence(BaseModel):
         return VerseRef(surah=self.surah_number, ayah=self.ayah_number)
 
 
-class Finding(BaseModel):
-    """Analyst synthesis unit grounded in evidence ids."""
-
-    id: str
-    summary: str
-    evidence_ids: list[str] = Field(default_factory=list)
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-
-
 class TafsirComparison(BaseModel):
-    """Comparison across retrieved tafsir sources for one verse (evidence-grounded)."""
+    """Optional comparison across retrieved tafsir sources for one verse."""
 
-    verse_reference: str = Field(
-        description="Human-readable verse ref, e.g. '2:153'"
-    )
+    verse_reference: str = Field(description="e.g. '2:153'")
     agreements: list[str] = Field(default_factory=list)
     differences: list[str] = Field(default_factory=list)
-    difference_types: list[str] = Field(
-        default_factory=list,
-        description="Categories of real interpretive differences when present",
-    )
-    evidence_ids: list[str] = Field(
-        default_factory=list,
-        description="Ids of tafsir evidence items used in this comparison",
-    )
-    # Compatibility / structured ref
+    difference_types: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
     ref: VerseRef | None = None
     source_ids: list[str] = Field(default_factory=list)
     summary: str = ""
 
 
 class ResearchGap(BaseModel):
-    """Gap Analyzer output — mostly from deterministic checks."""
+    """Gap Analyzer output — deterministic sufficiency check."""
 
     sufficient: bool
     missing_evidence: list[str] = Field(default_factory=list)
@@ -225,53 +176,14 @@ class ResearchGap(BaseModel):
 
 
 class Evidence(BaseModel):
-    """Normalized evidence store entry referenced by claims."""
+    """Normalized evidence store entry used for citations and the final answer."""
 
     id: str
-    kind: str = Field(
-        description="verse | tafsir | linguistic | nuzool | other"
-    )
+    kind: str = Field(description="verse | tafsir | linguistic | nuzool | quran_meta | other")
     content: str
     citation: str
     refs: list[VerseRef] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class Claim(BaseModel):
-    """Auditable claim — must include non-empty evidence_ids."""
-
-    id: str
-    statement: str = Field(description="Claim text (auditable assertion)")
-    claim_type: ClaimType | str = ClaimType.DIRECT_FACT
-    evidence_ids: list[str] = Field(
-        min_length=1,
-        description="Required evidence ids — claims without evidence are rejected",
-    )
-    verification_status: ClaimVerificationStatus | str = ClaimVerificationStatus.PENDING
-    notes: str | None = None
-
-
-class ClaimVerdict(BaseModel):
-    """Per-claim verification outcome."""
-
-    claim_id: str
-    level: VerificationLevel
-    notes: str = ""
-
-
-class VerificationResult(BaseModel):
-    """Evidence Verifier output — stricter than the report generator."""
-
-    passed: bool
-    verified_claim_ids: list[str] = Field(default_factory=list)
-    unsupported_claim_ids: list[str] = Field(default_factory=list)
-    conflicting_claim_ids: list[str] = Field(default_factory=list)
-    evidence_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
-    notes: list[str] = Field(default_factory=list)
-    verdicts: list[ClaimVerdict] = Field(default_factory=list)
-    # Kept for older call sites
-    needs_more_research: bool = False
-    summary: str = ""
 
 
 ResearchAction = Literal[
@@ -302,30 +214,12 @@ class ResearchDispatch(BaseModel):
 
 
 class ResearchDecision(BaseModel):
-    """Supervisor decision from Research Manager — fixed action enum only."""
+    """Supervisor decision from Research Manager."""
 
     action: ResearchAction = Field(
-        description=(
-            "Primary next graph action from the fixed enum only. "
-            "Never invent node names. When dispatches has multiple "
-            "researcher actions, the graph fans out in parallel."
-        )
+        description="Primary next graph action; parallel waves use dispatches"
     )
-    task_id: str | None = Field(
-        default=None,
-        description="Plan task id for the primary action; else null",
-    )
-    dispatches: list[ResearchDispatch] = Field(
-        default_factory=list,
-        description=(
-            "Researcher wave to run. Length > 1 means LangGraph parallel "
-            "branches (independent tasks only). Empty for non-researcher actions."
-        ),
-    )
-    execution_pattern: ExecutionPattern | None = Field(
-        default=None,
-        description="Chosen execution strategy for this investigation",
-    )
-    reasoning: str = Field(
-        description="Brief rationale for this routing decision"
-    )
+    task_id: str | None = Field(default=None)
+    dispatches: list[ResearchDispatch] = Field(default_factory=list)
+    execution_pattern: ExecutionPattern | None = None
+    reasoning: str = Field(description="Brief rationale for this routing decision")
