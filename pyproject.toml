@@ -1,0 +1,17 @@
+[project]
+name = "quran-scholar"
+version = "0.1.0"
+description = "Quran Scholar agentic AI project"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "langchain[openai]>=1.2.10",
+    "langchain-community>=0.4.1",
+    "langchain-openai>=1.1.10",
+    "langchain-text-splitters>=1.1.1",
+    "langgraph>=1.0.9",
+    "python-dotenv>=1.0.0",
+    "tavily-python>=0.7.21",
+    "exa-py>=2.4.0",
+    "bs4>=0.0.2",
+]
