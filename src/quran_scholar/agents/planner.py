@@ -1,4 +1,4 @@
-"""Planner agent — structured ResearchPlan from user question."""
+"""Planner — structured ResearchPlan from user question (LLM/heuristics, no tools)."""
 
 from __future__ import annotations
 

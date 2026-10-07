@@ -11,7 +11,8 @@ Orchestrates LangGraph agents with [Tafsir MCP](https://tafsirmcp.netlify.app/) 
 | Layer | Role |
 | --- | --- |
 | **LangGraph** | Workflow orchestration (non-sequential: planner, parallel research, verify/retry) |
-| **LLM agents** | Planning, comparison, analysis, verification; researchers use `create_agent` + MCP tools |
+| **Tool agents (`*_agent`)** | Researchers only: `create_agent` + MCP tools |
+| **Other LLM modules** | Planner, manager, gap, comparator, claims, verifier, report — LLM/heuristics, **no** tools |
 | **Tafsir MCP** | Tools bound per role (`fetch_ayah`, `search_quran_text`, `fetch_tafsir`, `search_in_tafsir`, …) |
 | **Pydantic** | Structured plans, evidence, claims, verification |
 | **Deterministic Python** | Validation, routing, iteration counters, state updates |
@@ -23,8 +24,8 @@ src/quran_scholar/
 ├── models.py       # Pydantic evidence / plan / claim schemas
 ├── state.py        # Shared ResearchState for the graph
 ├── mcp/            # Tafsir MCP client adapter
-├── agents/         # LLM-backed agents
-├── nodes/          # Graph nodes (agents + deterministic)
+├── agents/         # Tool agents (*_agent) + LLM helpers (no tools)
+├── nodes/          # Graph node wrappers + routing
 ├── graph/          # StateGraph wiring
 └── web/            # FastAPI UI (Arabic question → report)
 ```
@@ -173,7 +174,7 @@ Trace lines look like:
 
 - One shared `ResearchState`; nodes return **only** fields they change.
 - Append reducers on evidence/claims/findings so iterations cannot wipe prior work.
-- Not every node is an agent — use LLMs for interpretation/planning; use Python for validation/routing.
+- Only researchers are named `*_agent` (LLM + tools). Planner/manager/analysis/report use LLM or heuristics without tools.
 - Research iterates until verification passes or `max_research_iterations` is hit.
 
 ## Attribution

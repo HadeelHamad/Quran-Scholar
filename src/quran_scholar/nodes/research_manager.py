@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from quran_scholar.agents.research_manager_agent import (
+from quran_scholar.agents.research_manager import (
     choose_execution_pattern,
     decide_next_action,
 )

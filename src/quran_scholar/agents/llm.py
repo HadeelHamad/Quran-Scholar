@@ -1,4 +1,4 @@
-"""Shared LLM configuration for agent nodes."""
+"""Shared LLM configuration."""
 
 from __future__ import annotations
 

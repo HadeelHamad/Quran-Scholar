@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from quran_scholar.agents.gap_analyzer_agent import run_gap_analysis
+from quran_scholar.agents.gap_analyzer import run_gap_analysis
 from quran_scholar.state import ResearchState
 
 

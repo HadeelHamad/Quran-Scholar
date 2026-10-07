@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from quran_scholar.agents.planner_agent import plan_research
+from quran_scholar.agents.planner import plan_research
 from quran_scholar.state import ResearchState
 from quran_scholar.trace import trace, trace_lines
 

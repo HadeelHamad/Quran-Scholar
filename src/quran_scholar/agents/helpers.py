@@ -1,4 +1,4 @@
-"""Shared pack/evidence helpers for researcher agents."""
+"""Shared pack/evidence helpers for researcher agents (tool-calling)."""
 
 from __future__ import annotations
 
