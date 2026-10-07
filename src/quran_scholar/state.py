@@ -17,6 +17,7 @@ from langgraph.graph.message import add_messages
 from quran_scholar.models import (
     Claim,
     Evidence,
+    ExecutionPattern,
     Finding,
     LinguisticEvidence,
     NuzoolEvidence,
@@ -40,7 +41,8 @@ class ResearchState(TypedDict, total=False):
     # Planning / supervision
     research_plan: ResearchPlan  # replace
     research_decision: ResearchDecision | None  # replace — supervisor output
-    current_task_id: str  # replace
+    execution_pattern: ExecutionPattern | None  # replace — thematic / verse / comparison
+    current_task_id: str  # replace — primary task; parallel waves use decision.dispatches
     completed_task_ids: Annotated[list[str], operator.add]  # append
     unresolved_gaps: list[str]  # replace — current gap list from gap analyzer
     research_gap: ResearchGap | None  # replace — full Gap Analyzer output
@@ -97,6 +99,7 @@ def initial_research_state(
         user_question=user_question,
         language=language,
         research_decision=None,
+        execution_pattern=None,
         research_gap=None,
         completed_task_ids=[],
         unresolved_gaps=[],

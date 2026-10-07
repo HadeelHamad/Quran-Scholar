@@ -29,11 +29,22 @@ from quran_scholar.state import ResearchState
 
 def build_graph():
     """
-    START → Planner → Research Manager ⇄ Researchers → Gap Analyzer
-         ↘ insufficient                              ↙
-           sufficient → Tafsir Comparator → Claim Extractor
-             → Evidence Verifier ⇄ Gap Analyzer (retry)
-             → Report Generator → END
+    START → Planner → Research Manager
+         │                │
+         │     ┌──────────┼──────────┐  (parallel when independent)
+         │     ▼          ▼          ▼
+         │   Quran     Tafsir    Linguistic / Context
+         │     │          │          │
+         │     └──────────┼──────────┘
+         │                ▼
+         │           Gap Analyzer ⇄ Research Manager
+         │                │ sufficient
+         ▼                ▼
+              Tafsir Comparator → Claim Extractor
+                → Evidence Verifier ⇄ Gap Analyzer (retry)
+                → Report Generator → END
+
+    Tafsir / linguistic / context never run before verses are selected.
     """
     graph = StateGraph(ResearchState)
 
@@ -52,6 +63,7 @@ def build_graph():
     graph.add_edge(START, "planner")
     graph.add_edge("planner", "research_manager")
 
+    # Conditional edge may return str | list[str] for parallel fan-out
     graph.add_conditional_edges(
         "research_manager",
         route_after_research_manager,
@@ -67,6 +79,7 @@ def build_graph():
         },
     )
 
+    # All researchers converge on Gap Analyzer (LangGraph joins parallel branches)
     for researcher in (
         "quran_researcher",
         "tafsir_researcher",

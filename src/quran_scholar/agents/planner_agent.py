@@ -39,10 +39,17 @@ Task kinds (use only these in tasks[].kind):
 Do NOT add tasks named verification or tafsir_comparison; the graph handles those later.
 Use needs_tafsir_comparison=true when multiple tafsir sources should be compared.
 
+Execution strategies the Research Manager will choose:
+- thematic: quran_search first; then tafsir_fetch / linguistic / nuzool may run in
+  PARALLEL — give them depends_on=[quran task id] only (not each other).
+- verse_specific: fetch_ayah → tafsir_fetch → optional linguistic → optional nuzool
+  (sequential depends_on chain).
+- tafsir_comparison: fetch_ayah → tafsir_fetch only (comparison is a later graph stage).
+
 Keep tasks minimal:
 - Verse-specific + one named mufassir (e.g. Ibn Kathir) → fetch_ayah then tafsir_fetch only;
   set target_tafsir_sources to that source (katheer for Ibn Kathir).
-- Broad thematic question → quran_search, then tafsir_fetch; add linguistic/nuzool only if truly useful.
+- Broad thematic question → quran_search, then parallelizable tafsir/linguistic/nuzool.
 
 Each task needs a unique id (e.g. t1_fetch_ayah), description, kind, and depends_on where order matters.
 Respond in the user's language for summaries/descriptions when language is ar; keep kind ids in English.
@@ -109,31 +116,74 @@ def _heuristic_plan(user_question: str, language: str) -> ResearchPlan:
         )
 
     if verse:
+        needs_ling = any(
+            w in q_lower for w in ("word", "root", "معنى", "جذر", "لغة")
+        ) or "word" in q_lower or "root" in q_lower
+        needs_nuzool = any(
+            w in q_lower for w in ("nuzool", "nuzul", "asbab", "سبب", "نزول", "reason")
+        )
+        tasks = [
+            ResearchTask(
+                id="t1_fetch_ayah",
+                description=f"Fetch {verse.surah}:{verse.ayah}",
+                kind="fetch_ayah",
+            ),
+            ResearchTask(
+                id="t2_tafsir_fetch",
+                description="Fetch tafsir for the verse",
+                kind="tafsir_fetch",
+                depends_on=["t1_fetch_ayah"],
+            ),
+        ]
+        # Sequential optional steps (verse_specific pattern — not parallel with tafsir)
+        if needs_ling:
+            tasks.append(
+                ResearchTask(
+                    id="t3_linguistic",
+                    description="Optional linguistic analysis of key terms",
+                    kind="linguistic",
+                    depends_on=["t2_tafsir_fetch"],
+                )
+            )
+        if needs_nuzool:
+            prev = "t3_linguistic" if needs_ling else "t2_tafsir_fetch"
+            tasks.append(
+                ResearchTask(
+                    id="t4_nuzool",
+                    description="Optional sabab al-nuzool for the verse",
+                    kind="nuzool",
+                    depends_on=[prev],
+                )
+            )
+        evidence = ["quran_text", "tafsir"]
+        if needs_ling:
+            evidence.append("linguistic")
+        if needs_nuzool:
+            evidence.append("nuzool")
+        # Comparison path when no optional supporting research
+        needs_compare = not needs_ling and not needs_nuzool
+        if needs_compare:
+            evidence.append("tafsir_comparison")
         return ResearchPlan(
             question_summary=user_question[:240],
             question_focus=QuestionFocus.VERSE_SPECIFIC,
-            required_evidence_types=["quran_text", "tafsir"],
-            needs_tafsir_comparison=True,
-            needs_linguistic_analysis="word" in q_lower or "root" in q_lower,
-            needs_sabab_nuzool="nuzool" in q_lower or "reason" in q_lower,
-            approach="Verse-specific study: text, tafsir, optional linguistic/nuzool.",
+            required_evidence_types=evidence,
+            needs_tafsir_comparison=needs_compare,
+            needs_linguistic_analysis=needs_ling,
+            needs_sabab_nuzool=needs_nuzool,
+            approach=(
+                "Verse-specific: fetch ayah → tafsir"
+                + (" → linguistic" if needs_ling else "")
+                + (" → nuzool" if needs_nuzool else "")
+                + (" → comparison" if needs_compare else "")
+                + "."
+            ),
             primary_verse=verse,
-            tasks=[
-                ResearchTask(
-                    id="t1_fetch_ayah",
-                    description=f"Fetch {verse.surah}:{verse.ayah}",
-                    kind="fetch_ayah",
-                ),
-                ResearchTask(
-                    id="t2_tafsir_fetch",
-                    description="Fetch tafsir for the verse",
-                    kind="tafsir_fetch",
-                    depends_on=["t1_fetch_ayah"],
-                ),
-            ],
+            tasks=tasks,
         )
 
-    # Thematic default (e.g. patience)
+    # Thematic default — after Quran, tafsir/linguistic/nuzool share depends_on
+    # so the Research Manager can fan them out in parallel.
     tasks = [
         ResearchTask(
             id="t1_quran_search",
@@ -181,7 +231,11 @@ def _heuristic_plan(user_question: str, language: str) -> ResearchPlan:
         needs_tafsir_comparison=True,
         needs_linguistic_analysis=needs_linguistic,
         needs_sabab_nuzool=needs_nuzool,
-        approach="Thematic search, then tafsir and optional linguistic/nuzool evidence.",
+        approach=(
+            "Thematic: Quran search first; then parallel tafsir ∥ linguistic"
+            + (" ∥ nuzool" if needs_nuzool else "")
+            + " once verses are selected."
+        ),
         tasks=tasks,
     )
 

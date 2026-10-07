@@ -53,6 +53,19 @@ class QuestionFocus(str, Enum):
     MIXED = "mixed"
 
 
+class ExecutionPattern(str, Enum):
+    """Research Manager execution strategies (chosen dynamically)."""
+
+    THEMATIC = "thematic"
+    """Quran → then parallel Linguistic ∥ Tafsir ∥ Context (when ready) → Gap."""
+
+    VERSE_SPECIFIC = "verse_specific"
+    """Fetch ayah → Tafsir → optional Linguistic → optional Context → verify path."""
+
+    TAFSIR_COMPARISON = "tafsir_comparison"
+    """Fetch ayah → Tafsir → Comparator → Verification."""
+
+
 class VerseRef(BaseModel):
     surah: int = Field(ge=1, le=114)
     ayah: int = Field(ge=1)
@@ -287,19 +300,47 @@ ResearchAction = Literal[
     "finish",
 ]
 
+RESEARCHER_ACTIONS: frozenset[str] = frozenset(
+    {
+        "quran_research",
+        "tafsir_research",
+        "linguistic_research",
+        "context_research",
+    }
+)
+
+
+class ResearchDispatch(BaseModel):
+    """One researcher invocation in a (possibly parallel) wave."""
+
+    action: ResearchAction
+    task_id: str | None = None
+
 
 class ResearchDecision(BaseModel):
     """Supervisor decision from Research Manager — fixed action enum only."""
 
     action: ResearchAction = Field(
         description=(
-            "Next graph action from the fixed enum only. "
-            "Never invent node names."
+            "Primary next graph action from the fixed enum only. "
+            "Never invent node names. When dispatches has multiple "
+            "researcher actions, the graph fans out in parallel."
         )
     )
     task_id: str | None = Field(
         default=None,
-        description="Plan task id when dispatching a researcher; else null",
+        description="Plan task id for the primary action; else null",
+    )
+    dispatches: list[ResearchDispatch] = Field(
+        default_factory=list,
+        description=(
+            "Researcher wave to run. Length > 1 means LangGraph parallel "
+            "branches (independent tasks only). Empty for non-researcher actions."
+        ),
+    )
+    execution_pattern: ExecutionPattern | None = Field(
+        default=None,
+        description="Chosen execution strategy for this investigation",
     )
     reasoning: str = Field(
         description="Brief rationale for this routing decision"
