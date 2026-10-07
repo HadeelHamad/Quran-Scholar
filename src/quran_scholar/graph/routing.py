@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from quran_scholar.models import ResearchDecision, TaskStatus
+from quran_scholar.models import ResearchDecision
 from quran_scholar.state import ResearchState
 
 ROUTES = {
@@ -17,6 +17,7 @@ ROUTES = {
 
 
 def route_after_research_manager(state: ResearchState) -> str | list[str]:
+    """Only the Research Manager chooses the next node(s)."""
     decision = state.get("research_decision")
     if not isinstance(decision, ResearchDecision):
         return "gap_analyzer"
@@ -42,30 +43,3 @@ def task_id_for_action(state: ResearchState, action: str) -> str:
         if decision.action == action:
             return decision.task_id or ""
     return state.get("current_task_id") or ""
-
-
-def _wants_tafsir_comparison(state: ResearchState) -> bool:
-    plan = state.get("research_plan")
-    if plan is None:
-        return False
-    if plan.needs_tafsir_comparison:
-        return True
-    return "tafsir_comparison" in (plan.required_evidence_types or [])
-
-
-def route_after_gap_analyzer(state: ResearchState) -> str:
-    plan = state.get("research_plan")
-    done = set(state.get("completed_task_ids") or [])
-    pending = bool(
-        plan
-        and any(
-            t.id not in done and t.status != TaskStatus.SKIPPED for t in plan.tasks
-        )
-    )
-    if pending or state.get("gap_status") == "insufficient":
-        return "research_manager"
-    if state.get("gap_status") == "sufficient":
-        if _wants_tafsir_comparison(state):
-            return "tafsir_comparator"
-        return "report_generator"
-    return "research_manager"

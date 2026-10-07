@@ -84,14 +84,11 @@ Tools are wrapped in `src/quran_scholar/mcp/client.py` as LangChain tools
 │                    ▲                  ├──► Tafsir Researcher ┼──┤
 │                    │                  ├──► Linguistic Res.   ┘  │
 │                    │                  └──► Context Researcher ─┤
+│                    │                         │                  │
+│                    └──────── Gap Analyzer ◄──┘                  │
 │                    │                                            │
-│                    └──────── Gap Analyzer ◄─────────────────────┘
-│                              │                                  │
-│                 insufficient │ sufficient                       │
-│                              ▼                                  │
-│              (optional) Tafsir Comparator ──┐                   │
-│               only if needs_tafsir_comparison│                  │
-│                              └──────────────► Report → END      │
+│                    ├──► (optional) Tafsir Comparator ──┐        │
+│                    └──► Report Generator ──────────────┴► END   │
 └─────────────────────────────────────────────────────────────────┘
                              │
                              ▼
@@ -130,14 +127,14 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 | **Tafsir Researcher** | Classical commentary **when planned**. |
 | **Linguistic Researcher** | Word/root study **when planned**. |
 | **Context Researcher** | Asbab al-nuzool **when planned**. |
-| **Gap Analyzer** | Deterministic sufficiency check vs the plan; loop or advance. |
-| **Tafsir Comparator** | **Optional** — only if `needs_tafsir_comparison`. |
+| **Gap Analyzer** | Deterministic sufficiency check vs the plan; always returns to the manager. |
+| **Tafsir Comparator** | **Optional** — only if manager chooses `comparison`. |
 | **Report Generator** | Final Arabic **الإجابة** + **الأدلة** from collected evidence. |
 
 ### Routing (short)
 
-- **After Research Manager:** researcher(s), gap analysis, optional comparison, or finish (report).
-- **After Gap Analyzer:** back to manager if gaps/pending tasks; else optional comparator, otherwise **report**.
+- **Research Manager is the only router** for next work: researcher(s), gap analysis, optional comparison, or finish (report).
+- **After Gap Analyzer:** always back to the manager (which then decides loop / comparison / finish).
 
 Smoke test (node state updates log via `quran_scholar.graph.nodes`; report prints at the end):
 

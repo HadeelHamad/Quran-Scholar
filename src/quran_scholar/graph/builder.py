@@ -14,15 +14,12 @@ from quran_scholar.graph.nodes.report_generator import report_generator_node
 from quran_scholar.graph.nodes.research_manager import research_manager_node
 from quran_scholar.graph.nodes.tafsir_comparator import tafsir_comparator_node
 from quran_scholar.graph.nodes.tafsir_researcher import tafsir_researcher_node
-from quran_scholar.graph.routing import (
-    route_after_gap_analyzer,
-    route_after_research_manager,
-)
+from quran_scholar.graph.routing import route_after_research_manager
 from quran_scholar.state import ResearchState
 
 
 def build_graph():
-    """Planner → Manager ⇄ Researchers → Gap → (optional Comparator) → Report."""
+    """Planner → Manager ⇄ Researchers → Gap → Manager → (optional Comparator) → Report."""
     graph = StateGraph(ResearchState)
     nodes = {
         "planner": planner_node,
@@ -60,15 +57,7 @@ def build_graph():
         "context_researcher",
     ):
         graph.add_edge(researcher, "gap_analyzer")
-    graph.add_conditional_edges(
-        "gap_analyzer",
-        route_after_gap_analyzer,
-        {
-            "research_manager": "research_manager",
-            "tafsir_comparator": "tafsir_comparator",
-            "report_generator": "report_generator",
-        },
-    )
+    graph.add_edge("gap_analyzer", "research_manager")
     graph.add_edge("tafsir_comparator", "report_generator")
     graph.add_edge("report_generator", END)
     return graph.compile()
