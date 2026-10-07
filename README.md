@@ -69,16 +69,18 @@ START → Planner → Research Manager
 
 Wired in `src/quran_scholar/graph/builder.py` (stub nodes under `nodes/`).
 
-Smoke test (prints a live agent trace, then the report):
+Smoke test (logs a live agent trace via `quran_scholar.trace`, then the report):
 
 ```bash
 uv run python -c "
+import logging
 from quran_scholar.graph import build_graph
 from quran_scholar.state import initial_research_state
-from quran_scholar.trace import format_trace_log
+from quran_scholar.trace import format_trace_log, logger as trace_logger
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 out = build_graph().invoke(initial_research_state('ما تفسير آية الكرسي؟'))
-print(format_trace_log(out.get('trace_log')))
-print(out.get('final_report'))
+trace_logger.info(format_trace_log(out.get('trace_log')))
+trace_logger.info(out.get('final_report') or '')
 "
 ```
 

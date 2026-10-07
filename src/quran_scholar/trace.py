@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 AGENT_LABELS = {
@@ -29,12 +30,26 @@ _ACTION_PHRASES = {
     "finish": "Proceeding to final report...",
 }
 
+logger = logging.getLogger("quran_scholar.trace")
+
+
+def _ensure_trace_logging() -> None:
+    """One-line trace output on stderr (same feel as former print)."""
+    if logger.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
 
 def trace(agent: str, message: str, *, blank_before: bool = False) -> str:
+    _ensure_trace_logging()
     line = f"[{AGENT_LABELS.get(agent, agent)}] {message}"
     if blank_before:
-        print(flush=True)
-    print(line, flush=True)
+        logger.info("")
+    logger.info(line)
     return line
 
 
