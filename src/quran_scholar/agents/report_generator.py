@@ -9,9 +9,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from quran_scholar.agents.llm import get_llm
-from quran_scholar.services.citation_manager import citation_manager
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
 
 REPORT_SYSTEM = """You answer the user's Quran-related question in Modern Standard Arabic.
 
@@ -20,10 +18,10 @@ Output format — ONLY these two sections:
 ## الإجابة
 A direct answer (short paragraphs or bullets).
 Use ONLY facts from the supplied evidence / verses / comparisons.
-Cite with exact citation.label strings (e.g. [Quran 2:153]).
+Cite with exact citation strings (e.g. [Quran 2:153]).
 
 ## الأدلة
-List supporting evidence: citation.label + short excerpt (do not invent text).
+List supporting evidence: citation + short excerpt (do not invent text).
 
 Rules:
 - Do NOT write a long research report.
@@ -34,9 +32,6 @@ Rules:
 
 def _pack_inputs(state: ResearchState) -> dict[str, Any]:
     evidence = list(state.get("evidence_items") or [])[:40]
-    citation_manager.clear_cache()
-    citations = citation_manager.format_many(evidence)
-    citations_by_id = {c.evidence_id: c for c in citations}
     evidence_by_id = {e.id: e for e in evidence}
 
     verses = [
@@ -45,15 +40,18 @@ def _pack_inputs(state: ResearchState) -> dict[str, Any]:
     ]
     comparisons = []
     for c in state.get("tafsir_comparisons") or []:
+        labels = [
+            evidence_by_id[eid].citation
+            for eid in c.evidence_ids
+            if eid in evidence_by_id
+        ]
         comparisons.append(
             {
                 "verse_reference": c.verse_reference,
                 "agreements": c.agreements,
                 "differences": c.differences,
                 "summary": c.summary,
-                "citation_labels": citation_manager.labels_for_ids(
-                    c.evidence_ids, evidence_by_id
-                ),
+                "citation_labels": labels,
             }
         )
 
@@ -65,9 +63,7 @@ def _pack_inputs(state: ResearchState) -> dict[str, Any]:
                 "id": e.id,
                 "kind": e.kind,
                 "content": (e.content or "")[:2000],
-                "citation": citations_by_id[e.id].model_dump()
-                if e.id in citations_by_id
-                else citation_manager.format(e).model_dump(),
+                "citation": e.citation,
             }
             for e in evidence
         ],
@@ -88,8 +84,7 @@ def _deterministic_answer(payload: dict[str, Any]) -> str:
     elif evidence:
         lines.append("ملخص مما جُمع من الأدلة:")
         for e in evidence[:5]:
-            cite = e.get("citation") or {}
-            label = cite.get("label") if isinstance(cite, dict) else ""
+            label = e.get("citation") or e.get("kind") or ""
             lines.append(f"- {label}: {(e.get('content') or '')[:400]}")
         lines.append("")
     else:
@@ -101,8 +96,7 @@ def _deterministic_answer(payload: dict[str, Any]) -> str:
         lines.append("(لا توجد عناصر أدلة.)")
     else:
         for e in evidence:
-            cite = e.get("citation") or {}
-            label = cite.get("label") if isinstance(cite, dict) else str(cite)
+            label = e.get("citation") or e.get("kind") or ""
             lines.append(f"### {label}")
             lines.append((e.get("content") or "")[:1200])
             lines.append("")
@@ -140,18 +134,11 @@ def _llm_answer(payload: dict[str, Any]) -> str | None:
 
 
 def run_report_generation(state: ResearchState) -> dict:
-    t0 = trace(
-        "report_generator",
-        "Writing answer + evidence...",
-        blank_before=True,
-    )
     payload = _pack_inputs(state)
     report = _llm_answer(payload) or _deterministic_answer(payload)
     n = len(payload["evidence"])
-    t1 = trace("report_generator", f"Answer ready ({n} evidence item(s)).")
     return {
         "final_report": report,
         "research_complete": True,
         "warnings": [f"report_generator: Q&A from {n} evidence item(s)"],
-        **trace_lines(t0, t1),
     }

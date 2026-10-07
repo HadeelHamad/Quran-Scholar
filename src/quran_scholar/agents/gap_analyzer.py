@@ -6,7 +6,6 @@ from typing import Any
 
 from quran_scholar.models import ResearchGap, ResearchPlan, ResearchTask, TaskStatus
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
 
 
 def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
@@ -128,13 +127,6 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
 
     iteration = int(state.get("research_iteration") or 0)
     max_iters = int(state.get("max_research_iterations") or 3)
-    t_line = trace(
-        "gap_analyzer",
-        "Evidence sufficient."
-        if gap.sufficient
-        else f"Evidence insufficient — {len(gap.missing_evidence)} gap(s).",
-        blank_before=True,
-    )
     updates: dict[str, Any] = {
         "research_gap": gap,
         "unresolved_gaps": list(gap.missing_evidence),
@@ -146,7 +138,6 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
             f"missing={len(gap.missing_evidence)} "
             f"recommended={len(gap.recommended_tasks)}"
         ],
-        **trace_lines(t_line),
     }
     if plan and gap.recommended_tasks:
         existing = {t.id for t in plan.tasks}

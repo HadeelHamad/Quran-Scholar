@@ -34,7 +34,6 @@ class ResearchRequest(BaseModel):
 
 class ResearchResponse(BaseModel):
     report: str | None = None
-    trace_log: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     research_complete: bool = False
@@ -71,7 +70,6 @@ async def run_research(body: ResearchRequest) -> ResearchResponse:
 
     return ResearchResponse(
         report=out.get("final_report"),
-        trace_log=list(out.get("trace_log") or []),
         errors=list(out.get("errors") or []),
         warnings=list(out.get("warnings") or []),
         research_complete=bool(out.get("research_complete")),

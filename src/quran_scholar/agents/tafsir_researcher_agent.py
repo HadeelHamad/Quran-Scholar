@@ -22,7 +22,6 @@ from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import ResearchPlan, TafsirEvidence, VerseRef
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace
 
 _ATTRIB_RE = re.compile(
     r"^(?P<title>[^،,]+)[،,]?\s*(?P<author>.*?)\s*\(ت\.\s*(?P<death>[^)]+)\)\s*$"
@@ -202,19 +201,9 @@ def run_tafsir_research(state: ResearchState) -> dict:
         )
     question = state.get("user_question") or ""
     warnings: list[str] = []
-    lines = [
-        trace(
-            "tafsir_researcher",
-            "Retrieving tafsir (agent + tools)...",
-            blank_before=True,
-        )
-    ]
-
     if not verses:
-        lines.append(trace("tafsir_researcher", "Skipped — no selected verses yet."))
         return pack(
             tid,
-            lines=lines,
             warnings=["tafsir_researcher: no selected_verses to fetch"],
         )
 
@@ -250,13 +239,6 @@ def run_tafsir_research(state: ResearchState) -> dict:
             tools_used = agent_out.tools_used
             items, w2, mcp_failures = _items_from_tool_calls(agent_out.tool_calls)
             warnings.extend(w2)
-            if tools_used:
-                lines.append(
-                    trace(
-                        "tafsir_researcher",
-                        f"Agent called: {', '.join(tools_used)}",
-                    )
-                )
             if not items and verses:
                 # Agent failed to gather — fall back to direct fetch
                 warnings.append(
@@ -269,33 +251,14 @@ def run_tafsir_research(state: ResearchState) -> dict:
                 warnings.extend(w3)
                 tools_used = tools_used or ["fetch_tafsir"]
         else:
-            lines.append(
-                trace(
-                    "tafsir_researcher",
-                    "No LLM key — deterministic fetch_tafsir only.",
-                )
-            )
             items, w, mcp_failures, empty_results = _deterministic_fetch(verses, sources)
             warnings.extend(w)
             tools_used = ["fetch_tafsir"]
     except MCPError as exc:
-        return session_fail("tafsir_researcher", "Tafsir retrieval", exc, tid, lines)
+        return session_fail("tafsir_researcher", "Tafsir retrieval", exc, tid)
 
-    n_sources = len({t.source_id for t in items})
-    lines.append(
-        trace(
-            "tafsir_researcher",
-            f"Retrieved {len(items)} excerpt(s) from {n_sources} source(s)"
-            + (
-                f" ({mcp_failures} MCP failure(s) — not treated as no tafsir)."
-                if mcp_failures
-                else "."
-            ),
-        )
-    )
     return pack(
         tid,
-        lines=lines,
         warnings=warnings
         + [
             f"tafsir_researcher: fetched={len(items)} "

@@ -58,7 +58,6 @@ class ResearchState(TypedDict, total=False):
 
     warnings: Annotated[list[str], operator.add]
     errors: Annotated[list[str], operator.add]
-    trace_log: Annotated[list[str], operator.add]
 
     messages: Annotated[list, add_messages]
 
@@ -92,6 +91,5 @@ def initial_research_state(
         final_report=None,
         warnings=[],
         errors=[],
-        trace_log=[],
         messages=[],
     )

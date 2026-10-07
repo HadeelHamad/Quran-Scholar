@@ -25,7 +25,6 @@ from quran_scholar.mcp.parse import mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import NuzoolEvidence
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace
 
 CONTEXT_SYSTEM = """You are the Context Researcher for Quran Scholar (asbab al-nuzool).
 
@@ -204,19 +203,9 @@ def run_context_research(state: ResearchState) -> dict:
     verses = selected_verses(state)
     question = state.get("user_question") or ""
     warnings: list[str] = []
-    lines = [
-        trace(
-            "context_researcher",
-            "Checking asbab al-nuzool (agent + tools)...",
-            blank_before=True,
-        )
-    ]
-
     if not verses:
-        lines.append(trace("context_researcher", "Skipped — no selected verses."))
         return pack(
             tid,
-            lines=lines,
             warnings=["context_researcher: no selected_verses"],
         )
 
@@ -245,13 +234,6 @@ def run_context_research(state: ResearchState) -> dict:
             tools_used = agent_out.tools_used
             items, w2 = _items_from_tool_calls(agent_out.tool_calls)
             warnings.extend(w2)
-            if tools_used:
-                lines.append(
-                    trace(
-                        "context_researcher",
-                        f"Agent called: {', '.join(tools_used)}",
-                    )
-                )
             if not items:
                 warnings.append(
                     "context_researcher: agent empty — deterministic fallback"
@@ -259,9 +241,6 @@ def run_context_research(state: ResearchState) -> dict:
                 items, w3 = _deterministic_nuzool(verses)
                 warnings.extend(w3)
         else:
-            lines.append(
-                trace("context_researcher", "No LLM key — deterministic nuzool.")
-            )
             items, w = _deterministic_nuzool(verses)
             warnings.extend(w)
             tools_used = ["fetch_nuzool_reason"]
@@ -282,7 +261,6 @@ def run_context_research(state: ResearchState) -> dict:
             "Nuzool retrieval",
             exc,
             tid,
-            lines,
             nuzool_evidence=items,
         )
 
@@ -291,13 +269,6 @@ def run_context_research(state: ResearchState) -> dict:
         "NOT_AVAILABLE": sum(1 for n in items if n.status == "NOT_AVAILABLE"),
         "ERROR": sum(1 for n in items if n.status == "ERROR"),
     }
-    lines.append(
-        trace(
-            "context_researcher",
-            f"Nuzool results — FOUND={counts['FOUND']}, "
-            f"NOT_AVAILABLE={counts['NOT_AVAILABLE']}, ERROR={counts['ERROR']}.",
-        )
-    )
     evidence = [
         make_evidence(
             kind="nuzool",
@@ -317,7 +288,6 @@ def run_context_research(state: ResearchState) -> dict:
     ]
     return pack(
         tid,
-        lines=lines,
         warnings=warnings
         + [f"context_researcher: nuzool status counts={counts} tools={tools_used}"],
         nuzool_evidence=items,

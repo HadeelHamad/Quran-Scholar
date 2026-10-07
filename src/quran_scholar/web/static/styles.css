@@ -199,30 +199,6 @@ button[type="submit"]:disabled {
   border: 1px solid var(--border);
 }
 
-.trace-details {
-  margin-top: 1.25rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.trace-details summary {
-  cursor: pointer;
-  user-select: none;
-}
-
-.trace-details pre {
-  margin: 0.75rem 0 0;
-  padding: 0.75rem;
-  overflow-x: auto;
-  font-size: 0.75rem;
-  direction: ltr;
-  text-align: left;
-  background: var(--bg);
-  border-radius: 6px;
-  max-height: 16rem;
-  overflow-y: auto;
-}
-
 .diagnostics {
   margin-top: 1rem;
   font-size: 0.85rem;

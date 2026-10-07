@@ -4,8 +4,6 @@ const submitBtn = document.getElementById("submit-btn");
 const statusEl = document.getElementById("status");
 const resultSection = document.getElementById("result-section");
 const reportEl = document.getElementById("report");
-const traceLogEl = document.getElementById("trace-log");
-const traceDetails = document.getElementById("trace-details");
 const badgesEl = document.getElementById("badges");
 const diagnosticsEl = document.getElementById("diagnostics");
 
@@ -72,7 +70,6 @@ form.addEventListener("submit", async (e) => {
       const detail = data.detail || res.statusText || "خطأ غير معروف";
       reportEl.textContent =
         typeof detail === "string" ? detail : JSON.stringify(detail);
-      traceLogEl.textContent = "";
       badgesEl.innerHTML = "";
       diagnosticsEl.classList.add("hidden");
       resultSection.classList.remove("hidden");
@@ -80,17 +77,14 @@ form.addEventListener("submit", async (e) => {
     }
 
     reportEl.textContent =
-      data.report ||
-      "لم يُنتَج تقرير. راجع سجل التتبّع أو تحذيرات النظام أدناه.";
-    traceLogEl.textContent = (data.trace_log || []).join("\n");
-    traceDetails.open = false;
+      data.report || "لم يُنتَج تقرير. راجع تحذيرات النظام أدناه.";
     renderBadges(data);
     renderDiagnostics(data.errors, data.warnings);
     resultSection.classList.remove("hidden");
     resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     reportEl.textContent = "تعذّر الاتصال بالخادم. تأكد أن الخادم يعمل.";
-    traceLogEl.textContent = String(err);
+    renderDiagnostics([String(err)], []);
     resultSection.classList.remove("hidden");
   } finally {
     setLoading(false);

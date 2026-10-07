@@ -21,7 +21,6 @@ from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import safe_call_tool
 from quran_scholar.models import LinguisticEvidence, ResearchPlan, VerseRef
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace
 
 LING_SYSTEM = """You are the Linguistic Researcher for Quran Scholar.
 
@@ -194,13 +193,6 @@ def _deterministic_linguistic(
 
 def run_linguistic_research(state: ResearchState) -> dict:
     tid = state.get("current_task_id") or ""
-    lines = [
-        trace(
-            "linguistic_researcher",
-            "Analyzing roots (agent + tools)...",
-            blank_before=True,
-        )
-    ]
     plan: ResearchPlan | None = state.get("research_plan")
     kind = ""
     if plan and tid:
@@ -214,19 +206,15 @@ def run_linguistic_research(state: ResearchState) -> dict:
         reason = "plan.needs_linguistic_analysis"
     else:
         reason = "linguistic analysis not required for this question"
-        lines.append(trace("linguistic_researcher", f"Skipped ({reason})."))
         return pack(
             tid,
-            lines=lines,
             warnings=[f"linguistic_researcher: skipped ({reason})"],
         )
 
     verses = list(state.get("selected_verses") or [])
     if not verses:
-        lines.append(trace("linguistic_researcher", "Skipped — no selected verses."))
         return pack(
             tid,
-            lines=lines,
             warnings=["linguistic_researcher: no selected_verses"],
         )
 
@@ -267,13 +255,6 @@ def run_linguistic_research(state: ResearchState) -> dict:
             tools_used = agent_out.tools_used
             items, w2 = _items_from_tool_calls(agent_out.tool_calls)
             warnings.extend(w2)
-            if tools_used:
-                lines.append(
-                    trace(
-                        "linguistic_researcher",
-                        f"Agent called: {', '.join(tools_used)}",
-                    )
-                )
             if not items:
                 warnings.append(
                     "linguistic_researcher: agent empty — deterministic fallback"
@@ -281,31 +262,15 @@ def run_linguistic_research(state: ResearchState) -> dict:
                 items, w3 = _deterministic_linguistic(verses, question)
                 warnings.extend(w3)
         else:
-            lines.append(
-                trace(
-                    "linguistic_researcher",
-                    "No LLM key — deterministic analyze_word.",
-                )
-            )
             items, w = _deterministic_linguistic(verses, question)
             warnings.extend(w)
             tools_used = ["analyze_word"]
     except MCPError as exc:
         return session_fail(
-            "linguistic_researcher", "Linguistic retrieval", exc, tid, lines
-        )
+            "linguistic_researcher", "Linguistic retrieval", exc, tid)
 
-    roots = sorted({x.root for x in items if x.root})
-    lines.append(
-        trace(
-            "linguistic_researcher",
-            f"Analyzed {len(items)} item(s)"
-            + (f"; roots: {', '.join(roots)}." if roots else "."),
-        )
-    )
     return pack(
         tid,
-        lines=lines,
         warnings=warnings
         + [f"linguistic_researcher: items={len(items)} tools={tools_used}"],
         linguistic_evidence=items,

@@ -46,7 +46,7 @@ uv sync
 uv run quran-scholar-web
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765), type your question in Arabic, and submit. The page shows the final Arabic report, optional trace log, and any warnings.
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765), type your question in Arabic, and submit. The page shows the final Arabic report and any warnings.
 
 Options: `uv run quran-scholar-web --port 8080 --reload`
 
@@ -141,31 +141,17 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 - **After Research Manager:** researcher(s), gap analysis, optional comparison, or finish (report).
 - **After Gap Analyzer:** back to manager if gaps/pending tasks; else optional comparator, otherwise **report**.
 
-Smoke test (logs a live agent trace via `quran_scholar.trace`, then the report):
+Smoke test (node state updates log via `quran_scholar.nodes`; report prints at the end):
 
 ```bash
 uv run python -c "
 import logging
 from quran_scholar.graph import build_graph
 from quran_scholar.state import initial_research_state
-from quran_scholar.trace import format_trace_log, logger as trace_logger
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 out = build_graph().invoke(initial_research_state('ما تفسير آية الكرسي؟'))
-trace_logger.info(format_trace_log(out.get('trace_log')))
-trace_logger.info(out.get('final_report') or '')
+print(out.get('final_report') or '')
 "
-```
-
-Trace lines look like:
-
-```
-[Planner] Creating research plan...
-[ResearchManager] Selecting Quran research...
-[QuranResearcher] Searching Quran...
-[QuranResearcher] Found 14 candidate verses.
-[QuranResearcher] Selected 8 relevant verses.
-...
-[ReportGenerator] Generating final report.
 ```
 
 ## Design notes

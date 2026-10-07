@@ -6,9 +6,7 @@ import uuid
 from typing import Any
 
 from quran_scholar.models import Evidence, ResearchPlan, VerseEvidence, VerseRef
-from quran_scholar.services.citation_manager import citation_manager
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
 
 
 def selected_verses(state: ResearchState) -> list[VerseEvidence]:
@@ -27,6 +25,16 @@ def selected_verses(state: ResearchState) -> list[VerseEvidence]:
     return []
 
 
+def _citation_label(
+    kind: str, refs: list[VerseRef], metadata: dict[str, Any]
+) -> str:
+    source = metadata.get("source_id") or metadata.get("attribution") or kind
+    if refs:
+        verse = ", ".join(f"{r.surah}:{r.ayah}" for r in refs)
+        return f"[{source} {verse}]"
+    return f"[{source}]"
+
+
 def make_evidence(
     *,
     kind: str,
@@ -35,38 +43,30 @@ def make_evidence(
     metadata: dict[str, Any] | None = None,
     id_prefix: str | None = None,
 ) -> Evidence:
-    ev = Evidence(
+    meta = metadata or {}
+    return Evidence(
         id=f"{id_prefix or kind}-{uuid.uuid4().hex[:10]}",
         kind=kind,
         content=content,
-        citation="",
+        citation=_citation_label(kind, refs, meta),
         refs=refs,
-        metadata=metadata or {},
+        metadata=meta,
     )
-    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
 def pack(
     tid: str,
     *,
-    agent: str | None = None,
-    message: str | None = None,
-    lines: list[str] | None = None,
     warnings: list[str] | None = None,
     errors: list[str] | None = None,
     **fields: Any,
 ) -> dict[str, Any]:
-    """Build a researcher state update. Optionally starts a trace line."""
-    traces = list(lines or [])
-    if agent and message:
-        traces.insert(0, trace(agent, message, blank_before=True))
+    """Build a researcher state update."""
     out: dict[str, Any] = dict(fields)
     if warnings is not None:
         out["warnings"] = warnings
     if errors is not None:
         out["errors"] = errors
-    if traces:
-        out.update(trace_lines(*traces))
     if tid:
         out["completed_task_ids"] = [tid]
     return out
@@ -77,9 +77,7 @@ def session_fail(
     what: str,
     exc: BaseException,
     tid: str,
-    lines: list[str],
     **extra: Any,
 ) -> dict[str, Any]:
     msg = f"{what} failed (MCP session — not 'no evidence'): {exc}"
-    lines.append(trace(agent, f"MCP session failed: {exc}"))
-    return pack(tid, lines=lines, warnings=[msg], errors=[msg], **extra)
+    return pack(tid, warnings=[msg], errors=[msg], **extra)

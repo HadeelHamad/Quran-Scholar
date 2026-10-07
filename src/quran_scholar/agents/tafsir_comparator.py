@@ -17,7 +17,6 @@ from quran_scholar.models import (
     VerseRef,
 )
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
 
 COMPARATOR_SYSTEM = """You compare classical tafsir excerpts for ONE Quranic verse.
 
@@ -163,38 +162,19 @@ def run_tafsir_comparison(state: ResearchState) -> dict:
             or "tafsir_comparison" in (plan.required_evidence_types or [])
         )
     )
-    lines: list[str] = [
-        trace("tafsir_comparator", "Tafsir comparison...", blank_before=True)
-    ]
     if not wants:
-        lines.append(
-            trace(
-                "tafsir_comparator",
-                "Skipped — not required for this question.",
-            )
-        )
         return {
             "warnings": [
                 "tafsir_comparator: skipped (needs_tafsir_comparison=false)"
             ],
-            **trace_lines(*lines),
         }
 
     tafsirs = list(state.get("tafsir_evidence") or [])
     evidence_items = list(state.get("evidence_items") or [])
     selected = list(state.get("selected_verses") or [])
-    n_sources = len({t.source_id for t in tafsirs})
-    lines.append(
-        trace("tafsir_comparator", f"Comparing {n_sources} tafsir source(s)...")
-    )
-
     if not tafsirs:
-        lines.append(
-            trace("tafsir_comparator", "No tafsir evidence to compare.")
-        )
         return {
             "warnings": ["tafsir_comparator: no tafsir_evidence to compare"],
-            **trace_lines(*lines),
         }
 
     # Restrict to selected verses when present
@@ -219,18 +199,10 @@ def run_tafsir_comparison(state: ResearchState) -> dict:
             eids = [_evidence_id_for_tafsir(t, evidence_items) or "" for t in group]
             eids = [e for e in eids if e]
             comparisons.append(_llm_compare(verse_ref, ref, group, eids))
-
-    lines.append(
-        trace(
-            "tafsir_comparator",
-            f"Produced {len(comparisons)} comparison(s).",
-        )
-    )
     return {
         "tafsir_comparisons": comparisons,
         "warnings": [
             f"tafsir_comparator: produced {len(comparisons)} comparison(s) "
             f"from {len(tafsirs)} tafsir excerpt(s)"
         ],
-        **trace_lines(*lines),
     }

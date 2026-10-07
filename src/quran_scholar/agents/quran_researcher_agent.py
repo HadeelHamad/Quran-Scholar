@@ -23,7 +23,6 @@ from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import ResearchPlan, VerseEvidence, VerseRef
 from quran_scholar.question import normalize_question_text, parse_verse_ref
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace
 
 QURAN_SYSTEM = """You are the Quran Researcher for Quran Scholar.
 
@@ -337,14 +336,6 @@ def run_quran_research(state: ResearchState) -> dict:
     plan: ResearchPlan | None = state.get("research_plan")
     tid = state.get("current_task_id") or ""
     warnings: list[str] = []
-    lines = [
-        trace(
-            "quran_researcher",
-            "Searching Quran (agent + tools)...",
-            blank_before=True,
-        )
-    ]
-
     primary = plan.primary_verse if plan else None
     if primary is None:
         primary = parse_verse_ref(question)
@@ -395,13 +386,6 @@ def run_quran_research(state: ResearchState) -> dict:
                 else None
             )
             selected = _select_from_agent(discovered, structured)
-            if tools_used:
-                lines.append(
-                    trace(
-                        "quran_researcher",
-                        f"Agent called: {', '.join(tools_used)}",
-                    )
-                )
             if not discovered and not meta_evidence:
                 warnings.append(
                     "quran_researcher: agent found nothing — deterministic fallback"
@@ -411,30 +395,13 @@ def run_quran_research(state: ResearchState) -> dict:
                 )
                 warnings.extend(w3)
         else:
-            lines.append(
-                trace("quran_researcher", "No LLM key — deterministic tools only.")
-            )
             discovered, selected, w, mcp_failures = _deterministic_quran(
                 question, plan, tid
             )
             warnings.extend(w)
             tools_used = ["fetch_ayah", "search_quran_text"]
     except MCPError as exc:
-        return session_fail("quran_researcher", "Quran retrieval", exc, tid, lines)
-
-    lines.append(
-        trace("quran_researcher", f"Found {len(discovered)} candidate verse(s).")
-    )
-    lines.append(
-        trace("quran_researcher", f"Selected {len(selected)} relevant verse(s).")
-    )
-    if meta_evidence:
-        lines.append(
-            trace(
-                "quran_researcher",
-                f"Collected {len(meta_evidence)} meta/info evidence item(s).",
-            )
-        )
+        return session_fail("quran_researcher", "Quran retrieval", exc, tid)
 
     verse_evidence = [
         make_evidence(
@@ -453,7 +420,6 @@ def run_quran_research(state: ResearchState) -> dict:
 
     return pack(
         tid,
-        lines=lines,
         warnings=warnings
         + [
             f"quran_researcher: discovered={len(discovered)} "
