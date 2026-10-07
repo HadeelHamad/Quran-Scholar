@@ -28,8 +28,9 @@ def configured_tafsir_sources(plan_sources: list[str] | None = None) -> list[str
     return list(DEFAULT_TAFSIR_SOURCES)
 
 
-def quran_search_limit() -> int:
+def max_quran_search_verses() -> int:
+    """Max verses returned per MCP Quran text search (1–50)."""
     try:
-        return max(1, min(50, int(os.getenv("QURAN_SEARCH_LIMIT", "15"))))
+        return max(1, min(50, int(os.getenv("MAX_QURAN_SEARCH_VERSES", "15"))))
     except ValueError:
         return 15

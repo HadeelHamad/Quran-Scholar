@@ -12,7 +12,7 @@ ResearcherRole = Literal[
     "specialized",
 ]
 
-# Explicit allow-lists (reduces tool-selection errors and token usage)
+# Per-role allow-lists for create_agent — the LLM chooses among these tools
 TOOLSETS: dict[ResearcherRole, frozenset[str]] = {
     "quran": frozenset(
         {

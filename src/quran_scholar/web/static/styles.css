@@ -1,0 +1,273 @@
+:root {
+  --bg: #0f1419;
+  --surface: #1a2332;
+  --surface-elevated: #243044;
+  --border: #2d3a4f;
+  --text: #e8edf4;
+  --text-muted: #9aa8bc;
+  --accent: #c9a227;
+  --accent-dim: #8a7020;
+  --success: #3d9a6a;
+  --warn: #c98b3d;
+  --error: #c94d4d;
+  --radius: 12px;
+  --font-ui: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-report: "Amiri", "IBM Plex Sans Arabic", serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 18px;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-ui);
+  background: radial-gradient(ellipse 120% 80% at 50% -20%, #1e3a5f 0%, var(--bg) 55%);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.page {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand-mark {
+  font-size: 2.5rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.tagline {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.ask-card h2,
+.result-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 6rem;
+  padding: 0.85rem 1rem;
+  font-family: var(--font-report);
+  font-size: 1.1rem;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+textarea:focus {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+button[type="submit"] {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.65rem 1.75rem;
+  color: var(--bg);
+  background: linear-gradient(180deg, #d4b84a 0%, var(--accent) 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button[type="submit"]:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.status {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.status.loading {
+  color: var(--accent);
+}
+
+.result-card {
+  margin-top: 1.5rem;
+}
+
+.result-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.badge.ok {
+  color: #b8e6cf;
+  border-color: var(--success);
+  background: rgba(61, 154, 106, 0.15);
+}
+
+.badge.warn {
+  color: #f0d4a8;
+  border-color: var(--warn);
+  background: rgba(201, 139, 61, 0.12);
+}
+
+.report {
+  font-family: var(--font-report);
+  font-size: 1.15rem;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  padding: 1rem 1.1rem;
+  background: var(--surface-elevated);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.trace-details {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.trace-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.trace-details pre {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  direction: ltr;
+  text-align: left;
+  background: var(--bg);
+  border-radius: 6px;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.diagnostics {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+.diagnostics .err {
+  color: #f5a8a8;
+}
+
+.diagnostics .warn {
+  color: #f0d4a8;
+}
+
+.footer {
+  margin-top: 2.5rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.footer a {
+  color: var(--accent);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 16px;
+  }
+
+  .page {
+    padding: 1rem 0.75rem 2rem;
+  }
+}

@@ -16,7 +16,12 @@ dependencies = [
     "tavily-python>=0.7.21",
     "exa-py>=2.4.0",
     "bs4>=0.0.2",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
 ]
+
+[project.scripts]
+quran-scholar-web = "quran_scholar.web:main"
 
 [build-system]
 requires = ["hatchling"]

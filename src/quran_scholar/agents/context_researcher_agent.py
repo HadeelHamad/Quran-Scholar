@@ -1,14 +1,23 @@
-"""Context Researcher — asbab al-nuzool with FOUND / NOT_AVAILABLE / ERROR."""
+"""Context Researcher — create_agent + fetch_nuzool_reason (asbab al-nuzool)."""
 
 from __future__ import annotations
 
+import json
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from quran_scholar.agents.helpers import (
     make_evidence,
     pack,
     selected_verses,
     session_fail,
+)
+from quran_scholar.agents.mcp_agent import (
+    has_llm_credentials,
+    parse_tool_json,
+    run_researcher_agent,
+    tool_had_mcp_error,
 )
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
@@ -18,11 +27,22 @@ from quran_scholar.models import NuzoolEvidence
 from quran_scholar.state import ResearchState
 from quran_scholar.trace import trace
 
+CONTEXT_SYSTEM = """You are the Context Researcher for Quran Scholar (asbab al-nuzool).
+
+You have the MCP tool: fetch_nuzool_reason.
+Call it for the verse(s) in the brief that need revelation-context evidence.
+You may skip a verse only if the brief says nuzool is irrelevant for it.
+NEVER invent reasons of revelation — only tool results.
+"""
+
+
+class ContextAgentSummary(BaseModel):
+    notes: str = ""
+    verses_checked: list[str] = Field(default_factory=list)
+
 
 def _classify(surah: int, ayah: int, entry: dict[str, Any]) -> NuzoolEvidence:
-    source = str(
-        entry.get("attribution") or entry.get("source") or "nuzool"
-    )
+    source = str(entry.get("attribution") or entry.get("source") or "nuzool")
     text = entry.get("text")
     reason = entry.get("reason")
 
@@ -55,12 +75,142 @@ def _classify(surah: int, ayah: int, entry: dict[str, Any]) -> NuzoolEvidence:
     )
 
 
+def _items_from_tool_calls(tool_calls: list) -> tuple[list[NuzoolEvidence], list[str]]:
+    items: list[NuzoolEvidence] = []
+    warnings: list[str] = []
+    for call in tool_calls:
+        if call.name != "fetch_nuzool_reason":
+            continue
+        surah = call.args.get("surah")
+        ayah = call.args.get("ayah")
+        if surah is None or ayah is None:
+            warnings.append("context_researcher: fetch_nuzool_reason missing surah/ayah")
+            continue
+        surah_i, ayah_i = int(surah), int(ayah)
+        payload = parse_tool_json(call.content)
+        if tool_had_mcp_error(payload):
+            items.append(
+                NuzoolEvidence(
+                    status="ERROR",
+                    content=(
+                        payload.get("error")
+                        if isinstance(payload, dict)
+                        else "MCP request failed"
+                    ),
+                    source=None,
+                    surah_number=surah_i,
+                    ayah_number=ayah_i,
+                    raw={"error": payload, "mcp_failed": True},
+                )
+            )
+            continue
+        data = mcp_payload(payload) if not isinstance(payload, str) else payload
+        if not isinstance(data, dict):
+            warnings.append(
+                f"NO_EVIDENCE: unexpected nuzool payload for {surah_i}:{ayah_i}"
+            )
+            items.append(
+                NuzoolEvidence(
+                    status="NOT_AVAILABLE",
+                    content="Unexpected MCP payload shape (request succeeded)",
+                    source=None,
+                    surah_number=surah_i,
+                    ayah_number=ayah_i,
+                    raw={"payload": data},
+                )
+            )
+            continue
+        sources = data.get("sources")
+        if isinstance(sources, list) and sources:
+            for entry in sources:
+                if isinstance(entry, dict):
+                    items.append(_classify(surah_i, ayah_i, entry))
+        else:
+            warnings.append(f"NO_EVIDENCE: no nuzool sources for {surah_i}:{ayah_i}")
+            items.append(
+                NuzoolEvidence(
+                    status="NOT_AVAILABLE",
+                    content="No nuzool sources returned for this ayah",
+                    source=None,
+                    surah_number=surah_i,
+                    ayah_number=ayah_i,
+                    raw=data,
+                )
+            )
+    return items, warnings
+
+
+def _deterministic_nuzool(verses: list) -> tuple[list[NuzoolEvidence], list[str]]:
+    items: list[NuzoolEvidence] = []
+    warnings: list[str] = []
+    with ScopedTafsirMCPClient("context") as client:
+        for verse in verses:
+            surah, ayah = verse.ref.surah, verse.ref.ayah
+            outcome = safe_call_tool(
+                client,
+                "fetch_nuzool_reason",
+                {"surah": surah, "ayah": ayah},
+                label=f"fetch_nuzool_reason {surah}:{ayah}",
+            )
+            warnings.extend(outcome.warnings)
+            if outcome.failed:
+                items.append(
+                    NuzoolEvidence(
+                        status="ERROR",
+                        content=outcome.error or "MCP request failed",
+                        source=None,
+                        surah_number=surah,
+                        ayah_number=ayah,
+                        raw={"error": outcome.error, "mcp_failed": True},
+                    )
+                )
+                continue
+            payload = mcp_payload(outcome.data)
+            if not isinstance(payload, dict):
+                warnings.extend(
+                    mark_empty(
+                        outcome,
+                        f"NO_EVIDENCE: unexpected nuzool payload for {surah}:{ayah}",
+                    )
+                )
+                continue
+            sources = payload.get("sources")
+            if isinstance(sources, list) and sources:
+                for entry in sources:
+                    if isinstance(entry, dict):
+                        items.append(_classify(surah, ayah, entry))
+            else:
+                warnings.extend(
+                    mark_empty(
+                        outcome,
+                        f"NO_EVIDENCE: no nuzool sources for {surah}:{ayah}",
+                    )
+                )
+                items.append(
+                    NuzoolEvidence(
+                        status="NOT_AVAILABLE",
+                        content="No nuzool sources returned for this ayah",
+                        source=None,
+                        surah_number=surah,
+                        ayah_number=ayah,
+                        raw=payload,
+                    )
+                )
+    return items, warnings
+
+
 def run_context_research(state: ResearchState) -> dict:
-    """Fetch أسباب النزول. ERROR = MCP failed; NOT_AVAILABLE = empty success."""
     tid = state.get("current_task_id") or ""
     verses = selected_verses(state)
+    question = state.get("user_question") or ""
     warnings: list[str] = []
-    lines = [trace("context_researcher", "Checking asbab al-nuzool...", blank_before=True)]
+    lines = [
+        trace(
+            "context_researcher",
+            "Checking asbab al-nuzool (agent + tools)...",
+            blank_before=True,
+        )
+    ]
 
     if not verses:
         lines.append(trace("context_researcher", "Skipped — no selected verses."))
@@ -70,75 +220,51 @@ def run_context_research(state: ResearchState) -> dict:
             warnings=["context_researcher: no selected_verses"],
         )
 
+    brief = {
+        "question": question,
+        "verses": [{"surah": v.ref.surah, "ayah": v.ref.ayah} for v in verses],
+    }
+    user_msg = (
+        f"Brief:\n{json.dumps(brief, ensure_ascii=False)}\n\n"
+        "Call fetch_nuzool_reason for relevant verses."
+    )
+
     items: list[NuzoolEvidence] = []
+    tools_used: list[str] = []
 
     try:
-        with ScopedTafsirMCPClient("context") as client:
-            for verse in verses:
-                surah, ayah = verse.ref.surah, verse.ref.ayah
-                outcome = safe_call_tool(
-                    client,
-                    "fetch_nuzool_reason",
-                    {"surah": surah, "ayah": ayah},
-                    label=f"fetch_nuzool_reason {surah}:{ayah}",
+        if has_llm_credentials():
+            agent_out = run_researcher_agent(
+                role="context",
+                system_prompt=CONTEXT_SYSTEM,
+                user_message=user_msg,
+                response_format=ContextAgentSummary,
+                name="context_researcher",
+            )
+            warnings.extend(agent_out.warnings)
+            tools_used = agent_out.tools_used
+            items, w2 = _items_from_tool_calls(agent_out.tool_calls)
+            warnings.extend(w2)
+            if tools_used:
+                lines.append(
+                    trace(
+                        "context_researcher",
+                        f"Agent called: {', '.join(tools_used)}",
+                    )
                 )
-                warnings.extend(outcome.warnings)
-
-                if outcome.failed:
-                    items.append(
-                        NuzoolEvidence(
-                            status="ERROR",
-                            content=outcome.error or "MCP request failed",
-                            source=None,
-                            surah_number=surah,
-                            ayah_number=ayah,
-                            raw={"error": outcome.error, "mcp_failed": True},
-                        )
-                    )
-                    continue
-
-                payload = mcp_payload(outcome.data)
-                if not isinstance(payload, dict):
-                    warnings.extend(
-                        mark_empty(
-                            outcome,
-                            f"NO_EVIDENCE: unexpected nuzool payload for {surah}:{ayah}",
-                        )
-                    )
-                    items.append(
-                        NuzoolEvidence(
-                            status="NOT_AVAILABLE",
-                            content="Unexpected MCP payload shape (request succeeded)",
-                            source=None,
-                            surah_number=surah,
-                            ayah_number=ayah,
-                            raw={"payload": payload},
-                        )
-                    )
-                    continue
-
-                sources = payload.get("sources")
-                if isinstance(sources, list) and sources:
-                    for entry in sources:
-                        if isinstance(entry, dict):
-                            items.append(_classify(surah, ayah, entry))
-                else:
-                    warnings.extend(
-                        mark_empty(
-                            outcome,
-                            f"NO_EVIDENCE: no nuzool sources for {surah}:{ayah}",
-                        )
-                    )
-                    items.append(
-                        NuzoolEvidence(
-                            status="NOT_AVAILABLE",
-                            content="No nuzool sources returned for this ayah",
-                            source=None,
-                            surah_number=surah,
-                            ayah_number=ayah,
-                            raw=payload,
-                        )
-                    )
+            if not items:
+                warnings.append(
+                    "context_researcher: agent empty — deterministic fallback"
+                )
+                items, w3 = _deterministic_nuzool(verses)
+                warnings.extend(w3)
+        else:
+            lines.append(
+                trace("context_researcher", "No LLM key — deterministic nuzool.")
+            )
+            items, w = _deterministic_nuzool(verses)
+            warnings.extend(w)
+            tools_used = ["fetch_nuzool_reason"]
     except MCPError as exc:
         for v in verses:
             items.append(
@@ -192,7 +318,8 @@ def run_context_research(state: ResearchState) -> dict:
     return pack(
         tid,
         lines=lines,
-        warnings=warnings + [f"context_researcher: nuzool status counts={counts}"],
+        warnings=warnings
+        + [f"context_researcher: nuzool status counts={counts} tools={tools_used}"],
         nuzool_evidence=items,
         evidence_items=evidence,
     )

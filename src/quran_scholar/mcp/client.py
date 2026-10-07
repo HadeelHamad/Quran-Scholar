@@ -316,11 +316,24 @@ def get_tafsir_mcp_tools(
                 cleaned = {k: v for k, v in kwargs.items() if v is not None}
                 if "payload" in cleaned and len(cleaned) == 1:
                     cleaned = cleaned["payload"] or {}
-                if tool_role is not None:
-                    result = client.call_tool_for_role(tool_role, tool_name, cleaned)
-                else:
-                    result = client.call_tool(tool_name, cleaned)
-                return _normalize_tool_result(result)
+                try:
+                    if tool_role is not None:
+                        result = client.call_tool_for_role(
+                            tool_role, tool_name, cleaned
+                        )
+                    else:
+                        result = client.call_tool(tool_name, cleaned)
+                    return _normalize_tool_result(result)
+                except MCPError as exc:
+                    # Return error text so create_agent can recover / try another tool
+                    return json.dumps(
+                        {
+                            "mcp_error": True,
+                            "tool": tool_name,
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    )
 
             return _call
 
