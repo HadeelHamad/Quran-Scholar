@@ -6,12 +6,18 @@ from quran_scholar.models import ResearchTask, TaskStatus
 from quran_scholar.state import ResearchState
 
 RESEARCHER_BY_KIND = {
+    "fetch_ayah": "quran_researcher",
+    "quran_search": "quran_researcher",
     "verse_search": "quran_researcher",
     "quran": "quran_researcher",
     "tafsir_fetch": "tafsir_researcher",
+    "fetch_tafsir": "tafsir_researcher",
+    "tafsir_research": "tafsir_researcher",
     "tafsir": "tafsir_researcher",
     "linguistic": "linguistic_researcher",
+    "linguistic_analysis": "linguistic_researcher",
     "nuzool": "context_researcher",
+    "nuzool_research": "context_researcher",
     "context": "context_researcher",
 }
 

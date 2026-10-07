@@ -22,13 +22,30 @@ class ClaimSupport(str, Enum):
     UNKNOWN = "unknown"
 
 
+class QuestionFocus(str, Enum):
+    VERSE_SPECIFIC = "verse_specific"
+    THEMATIC = "thematic"
+    MIXED = "mixed"
+
+
+class VerseRef(BaseModel):
+    surah: int = Field(ge=1, le=114)
+    ayah: int = Field(ge=1)
+    surah_name: str | None = None
+
+
 class ResearchTask(BaseModel):
-    """A single planned research step."""
+    """A single planned research step executed by a specialist researcher."""
 
     id: str
     description: str
     kind: str = Field(
-        description="e.g. verse_search, tafsir_fetch, linguistic, nuzool, compare"
+        description=(
+            "Research step kind: fetch_ayah, quran_search, tafsir_fetch, "
+            "linguistic, nuzool (maps to graph researchers; do not use "
+            "verification or tafsir_comparison as task kinds — those are "
+            "downstream graph stages)"
+        )
     )
     status: TaskStatus = TaskStatus.PENDING
     depends_on: list[str] = Field(default_factory=list)
@@ -36,24 +53,49 @@ class ResearchTask(BaseModel):
 
 
 class ResearchPlan(BaseModel):
-    """Planner output: decomposed research tasks for the question."""
+    """Planner output: investigation plan only — never an answer to the user."""
 
-    question_summary: str
+    question_summary: str = Field(
+        description="What the user is asking, in one or two sentences (no tafsir content)"
+    )
+    question_focus: QuestionFocus = Field(
+        description="verse_specific if a surah:ayah is central; thematic if topic-based"
+    )
+    required_evidence_types: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Evidence needed, e.g. quran_text, tafsir, linguistic, nuzool, "
+            "tafsir_comparison (comparison is a downstream stage, not a researcher task)"
+        ),
+    )
+    needs_tafsir_comparison: bool = Field(
+        default=False,
+        description="True when multiple tafsir sources should be compared in analysis",
+    )
+    needs_linguistic_analysis: bool = Field(
+        default=False,
+        description="True when root/word analysis adds value",
+    )
+    needs_sabab_nuzool: bool = Field(
+        default=False,
+        description="True when asbab al-nuzool context is relevant",
+    )
     approach: str = Field(
         default="",
-        description="High-level strategy (parallel fetch, compare tafsirs, etc.)",
+        description="High-level investigation strategy (no Quranic quotations)",
     )
-    tasks: list[ResearchTask] = Field(default_factory=list)
+    tasks: list[ResearchTask] = Field(
+        default_factory=list,
+        description="Minimal set of researcher tasks; avoid unnecessary steps",
+    )
     target_tafsir_sources: list[str] = Field(
         default_factory=lambda: ["saadi", "katheer", "moyassar"],
-        description="Tafsir MCP source ids (e.g. tabary, katheer, saadi)",
+        description="Tafsir MCP source ids when tafsir is needed (e.g. katheer, saadi)",
     )
-
-
-class VerseRef(BaseModel):
-    surah: int = Field(ge=1, le=114)
-    ayah: int = Field(ge=1)
-    surah_name: str | None = None
+    primary_verse: VerseRef | None = Field(
+        default=None,
+        description="Primary surah:ayah when question_focus is verse_specific",
+    )
 
 
 class VerseEvidence(BaseModel):
