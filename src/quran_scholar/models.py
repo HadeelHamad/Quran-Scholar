@@ -66,7 +66,7 @@ class ResearchPlan(BaseModel):
         default_factory=list,
         description=(
             "Evidence needed for THIS question only, e.g. quran_text, tafsir, "
-            "linguistic, nuzool, tafsir_comparison, surah_info, qiraat, statistics. "
+            "linguistic, nuzool, tafsir_comparison, surah_info, statistics. "
             "Do not include tafsir unless interpretation is required."
         ),
     )

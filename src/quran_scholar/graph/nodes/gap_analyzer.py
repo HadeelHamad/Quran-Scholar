@@ -50,7 +50,7 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
             not types
             or any(
                 t in types
-                for t in ("quran_text", "surah_info", "qiraat", "statistics")
+                for t in ("quran_text", "surah_info", "statistics")
             )
             or any(
                 t.kind in ("fetch_ayah", "quran_search", "verse_search")
