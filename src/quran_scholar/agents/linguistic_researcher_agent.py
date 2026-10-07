@@ -5,25 +5,25 @@ from __future__ import annotations
 import json
 import os
 import re
-import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from quran_scholar.agents.helpers import (
+    make_evidence,
+    result,
+    session_error,
+    start_trace,
+    task_id,
+)
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
-from quran_scholar.models import (
-    Evidence,
-    LinguisticEvidence,
-    ResearchPlan,
-    VerseEvidence,
-    VerseRef,
-)
+from quran_scholar.models import LinguisticEvidence, ResearchPlan, VerseEvidence, VerseRef
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
+from quran_scholar.trace import trace
 
 TERM_PICKER_SYSTEM = """You pick important Quranic content words for linguistic study.
 Given a verse and the user question, return up to 3 word_no values (1-based positions
@@ -33,14 +33,8 @@ Only choose terms that help answer the question. If none warranted, return [].""
 
 
 class ImportantTerms(BaseModel):
-    word_numbers: list[int] = Field(
-        default_factory=list,
-        description="1-based word positions in the ayah (max 3)",
-    )
-    roots_hint: list[str] = Field(
-        default_factory=list,
-        description="Optional Arabic roots to study if known (e.g. صبر)",
-    )
+    word_numbers: list[int] = Field(default_factory=list)
+    roots_hint: list[str] = Field(default_factory=list)
 
 
 _ROOT_FROM_SARF = re.compile(
@@ -49,41 +43,29 @@ _ROOT_FROM_SARF = re.compile(
 _ROOT_IN_PARENS = re.compile(r"\(([ء-ي]{2,5})\)")
 
 
-def _should_run_linguistic(state: ResearchState) -> tuple[bool, str]:
-    """Do not auto-run deep linguistics for every theological question."""
+def _should_run(state: ResearchState) -> tuple[bool, str]:
     plan: ResearchPlan | None = state.get("research_plan")
-    task_id = state.get("current_task_id") or ""
-    task_kind = ""
-    if plan and task_id:
+    tid = task_id(state)
+    kind = ""
+    if plan and tid:
         for t in plan.tasks:
-            if t.id == task_id:
-                task_kind = t.kind
+            if t.id == tid:
+                kind = t.kind
                 break
-
-    if task_kind in ("linguistic", "linguistic_analysis"):
+    if kind in ("linguistic", "linguistic_analysis"):
         return True, "explicit linguistic task"
-
     if plan and plan.needs_linguistic_analysis:
         return True, "plan.needs_linguistic_analysis"
-
     return False, "linguistic analysis not required for this question"
 
 
-def _tokenize_words(text: str) -> list[str]:
-    return [w for w in (text or "").split() if w.strip()]
-
-
-def _pick_terms(
-    question: str,
-    verse: VerseEvidence,
-) -> ImportantTerms:
-    words = _tokenize_words(verse.text_uthmani)
+def _pick_terms(question: str, verse: VerseEvidence) -> ImportantTerms:
+    words = [w for w in (verse.text_uthmani or "").split() if w.strip()]
     if not words:
         return ImportantTerms()
 
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("your_"):
-        # Heuristic: middle content words, skip short particles
         skip = {"إن", "في", "من", "على", "إلى", "عن", "ما", "لا", "أن", "يا", "و", "ف"}
         idxs = [
             i + 1
@@ -93,11 +75,8 @@ def _pick_terms(
         ]
         return ImportantTerms(word_numbers=idxs[:3])
 
-    llm = get_llm()
-    structured = llm.with_structured_output(ImportantTerms)
     try:
-        catalog = [{"word_no": i + 1, "word": w} for i, w in enumerate(words)]
-        out = structured.invoke(
+        out = get_llm().with_structured_output(ImportantTerms).invoke(
             [
                 {"role": "system", "content": TERM_PICKER_SYSTEM},
                 {
@@ -105,7 +84,7 @@ def _pick_terms(
                     "content": (
                         f"Question: {question}\n"
                         f"Verse {verse.ref.surah}:{verse.ref.ayah}\n"
-                        f"Words: {json.dumps(catalog, ensure_ascii=False)}"
+                        f"Words: {json.dumps([{'word_no': i + 1, 'word': w} for i, w in enumerate(words)], ensure_ascii=False)}"
                     ),
                 },
             ]
@@ -127,74 +106,40 @@ def _extract_root(analysis: dict[str, Any]) -> str | None:
         match = _ROOT_FROM_SARF.search(sarf)
         if match:
             return match.group(1)
-        # Fallback: last parenthesized Arabic token in sarf (often the root)
         parens = _ROOT_IN_PARENS.findall(sarf)
         if parens:
             return parens[-1]
     word = str(analysis.get("word") or "")
-    # Light heuristic for common stems embedded in the surface form
     for stem in ("صبر", "رحم", "أمن", "صلى", "غفر"):
         if stem in word:
             return stem
     return None
 
 
-def _ling_to_evidence(item: LinguisticEvidence) -> Evidence:
-    from quran_scholar.services.citation_manager import citation_manager
-
-    ev = Evidence(
-        id=f"ling-{uuid.uuid4().hex[:10]}",
-        kind="linguistic",
-        content=item.analysis,
-        citation="",
-        refs=item.related_verses,
-        metadata={
-            "source_tool": item.source_tool,
-            "root": item.root,
-            "raw": item.raw,
-        },
-    )
-    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
-
-
 def run_linguistic_research(state: ResearchState) -> dict:
-    """
-    Investigate terminology when relevant.
-
-    Flow: selected verses → important terms → analyze_word → roots →
-    find_root_occurrences → get_root_stats.
-    Skips when the plan does not call for linguistic work.
-    """
-    task_id = state.get("current_task_id") or ""
-    lines: list[str] = [
-        trace("linguistic_researcher", "Analyzing roots...", blank_before=True)
-    ]
-    should, reason = _should_run_linguistic(state)
+    tid = task_id(state)
+    lines = start_trace("linguistic_researcher", "Analyzing roots...")
+    should, reason = _should_run(state)
     if not should:
-        lines.append(
-            trace("linguistic_researcher", f"Skipped ({reason}).")
+        lines.append(trace("linguistic_researcher", f"Skipped ({reason})."))
+        return result(
+            tid,
+            traces=lines,
+            warnings=[f"linguistic_researcher: skipped ({reason})"],
         )
-        return {
-            "warnings": [f"linguistic_researcher: skipped ({reason})"],
-            "completed_task_ids": [task_id] if task_id else [],
-            **trace_lines(*lines),
-        }
 
     verses = list(state.get("selected_verses") or [])
     if not verses:
-        lines.append(
-            trace("linguistic_researcher", "Skipped — no selected verses.")
+        lines.append(trace("linguistic_researcher", "Skipped — no selected verses."))
+        return result(
+            tid,
+            traces=lines,
+            warnings=["linguistic_researcher: no selected_verses"],
         )
-        return {
-            "warnings": ["linguistic_researcher: no selected_verses"],
-            "completed_task_ids": [task_id] if task_id else [],
-            **trace_lines(*lines),
-        }
 
     question = state.get("user_question") or ""
-    linguistic_items: list[LinguisticEvidence] = []
+    items: list[LinguisticEvidence] = []
     warnings: list[str] = []
-    errors: list[str] = []
     roots_seen: set[str] = set()
 
     try:
@@ -232,7 +177,7 @@ def run_linguistic_research(state: ResearchState) -> dict:
                         continue
                     root = _extract_root(payload)
                     word = str(payload.get("word") or f"word_no={word_no}")
-                    linguistic_items.append(
+                    items.append(
                         LinguisticEvidence(
                             query=(
                                 f"{verse.ref.surah}:{verse.ref.ayah}"
@@ -247,17 +192,13 @@ def run_linguistic_research(state: ResearchState) -> dict:
                     )
                     if root:
                         roots_seen.add(root)
-
                 for hint in picks.roots_hint:
                     if hint and hint.strip():
                         roots_seen.add(hint.strip())
 
             for root in sorted(roots_seen)[:5]:
                 stats_out = safe_call_tool(
-                    client,
-                    "get_root_stats",
-                    {"root": root},
-                    label=f"get_root_stats {root}",
+                    client, "get_root_stats", {"root": root}, label=f"get_root_stats {root}"
                 )
                 warnings.extend(stats_out.warnings)
                 occ_out = safe_call_tool(
@@ -276,7 +217,7 @@ def run_linguistic_research(state: ResearchState) -> dict:
                     for h in occ[:20]
                     if "surah" in h and "ayah" in h
                 ]
-                linguistic_items.append(
+                items.append(
                     LinguisticEvidence(
                         query=f"root:{root}",
                         root=root,
@@ -292,44 +233,46 @@ def run_linguistic_research(state: ResearchState) -> dict:
                         related_verses=related[:20],
                         source_tool="get_root_stats+find_root_occurrences",
                         raw={
-                            "stats": (
-                                stats if isinstance(stats, dict) else {"value": stats}
-                            ),
+                            "stats": stats if isinstance(stats, dict) else {"value": stats},
                             "occurrences": occ,
                         },
                     )
                 )
     except MCPError as exc:
-        msg = f"Linguistic retrieval failed (MCP session — not 'no analysis'): {exc}"
-        lines.append(trace("linguistic_researcher", f"MCP session failed: {exc}"))
-        return {
-            "warnings": [msg],
-            "errors": [msg],
-            "completed_task_ids": [task_id] if task_id else [],
-            **trace_lines(*lines),
-        }
+        return session_error(
+            "linguistic_researcher", "Linguistic retrieval", exc, tid, lines
+        )
 
-    evidence = [_ling_to_evidence(x) for x in linguistic_items]
     root_list = sorted(r for r in roots_seen if r)
     lines.append(
         trace(
             "linguistic_researcher",
-            f"Analyzed {len(linguistic_items)} item(s)"
+            f"Analyzed {len(items)} item(s)"
             + (f"; roots: {', '.join(root_list)}." if root_list else "."),
         )
     )
-    updates: dict[str, Any] = {
-        "linguistic_evidence": linguistic_items,
-        "evidence_items": evidence,
-        "warnings": warnings
+    evidence = [
+        make_evidence(
+            kind="linguistic",
+            content=x.analysis,
+            refs=x.related_verses,
+            id_prefix="ling",
+            metadata={
+                "source_tool": x.source_tool,
+                "root": x.root,
+                "raw": x.raw,
+            },
+        )
+        for x in items
+    ]
+    return result(
+        tid,
+        traces=lines,
+        warnings=warnings
         + [
             f"linguistic_researcher: ran ({reason}); "
-            f"items={len(linguistic_items)} roots={sorted(roots_seen)}"
+            f"items={len(items)} roots={sorted(roots_seen)}"
         ],
-        **trace_lines(*lines),
-    }
-    if task_id:
-        updates["completed_task_ids"] = [task_id]
-    if errors:
-        updates["errors"] = errors
-    return updates
+        linguistic_evidence=items,
+        evidence_items=evidence,
+    )

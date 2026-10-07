@@ -5,20 +5,20 @@ from __future__ import annotations
 import json
 import os
 import re
-import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from quran_scholar.agents.helpers import make_evidence, result, session_error, start_trace, task_id
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.config import quran_search_limit
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
-from quran_scholar.models import Evidence, ResearchPlan, VerseEvidence, VerseRef
+from quran_scholar.models import ResearchPlan, VerseEvidence, VerseRef
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
+from quran_scholar.trace import trace
 
 SEARCH_CONCEPTS_SYSTEM = """You generate short Quran search queries for Tafsir MCP FTS5.
 Return 1–4 concise ARABIC keyword stems (no English; avoid leading ال when possible).
@@ -219,22 +219,18 @@ def _evaluate_selection(
         ]
 
 
-def _verse_to_evidence(v: VerseEvidence) -> Evidence:
-    from quran_scholar.services.citation_manager import citation_manager
-
-    ev = Evidence(
-        id=f"verse-{v.ref.surah}-{v.ref.ayah}-{uuid.uuid4().hex[:8]}",
+def _verse_to_evidence(v: VerseEvidence):
+    return make_evidence(
         kind="verse",
         content=v.text_uthmani,
-        citation="",  # filled by citation_manager
         refs=[v.ref],
+        id_prefix=f"verse-{v.ref.surah}-{v.ref.ayah}",
         metadata={
             "source_tool": v.source_tool,
             "relevance": v.relevance,
             "raw": v.raw,
         },
     )
-    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
 def run_quran_research(state: ResearchState) -> dict:
@@ -248,16 +244,13 @@ def run_quran_research(state: ResearchState) -> dict:
     question = state.get("user_question") or ""
     language = state.get("language") or "ar"
     plan: ResearchPlan | None = state.get("research_plan")
-    task_id = state.get("current_task_id") or ""
+    tid = task_id(state)
     warnings: list[str] = []
-    errors: list[str] = []
 
     discovered: list[VerseEvidence] = []
     selected: list[VerseEvidence] = []
     mcp_failures = 0
-    lines: list[str] = [
-        trace("quran_researcher", "Searching Quran...", blank_before=True)
-    ]
+    lines = start_trace("quran_researcher", "Searching Quran...")
 
     try:
         with ScopedTafsirMCPClient("quran") as client:
@@ -266,9 +259,9 @@ def run_quran_research(state: ResearchState) -> dict:
                 primary = _parse_verse_ref(question)
 
             task_kind = ""
-            if plan and task_id:
+            if plan and tid:
                 for t in plan.tasks:
-                    if t.id == task_id:
+                    if t.id == tid:
                         task_kind = t.kind
                         break
 
@@ -369,29 +362,17 @@ def run_quran_research(state: ResearchState) -> dict:
                 )
             )
     except MCPError as exc:
-        msg = f"Quran retrieval failed (MCP session — not 'no verses'): {exc}"
-        lines.append(trace("quran_researcher", f"MCP session failed: {exc}"))
-        return {
-            "warnings": [msg],
-            "errors": [msg],
-            "completed_task_ids": [task_id] if task_id else [],
-            **trace_lines(*lines),
-        }
+        return session_error("quran_researcher", "Quran retrieval", exc, tid, lines)
 
-    evidence = [_verse_to_evidence(v) for v in selected]
-    updates: dict[str, Any] = {
-        "discovered_verses": discovered,
-        "selected_verses": selected,
-        "evidence_items": evidence,
-        "warnings": warnings
+    return result(
+        tid,
+        traces=lines,
+        warnings=warnings
         + [
             f"quran_researcher: discovered={len(discovered)} "
             f"selected={len(selected)} mcp_failures={mcp_failures}"
         ],
-        **trace_lines(*lines),
-    }
-    if task_id:
-        updates["completed_task_ids"] = [task_id]
-    if errors:
-        updates["errors"] = errors
-    return updates
+        discovered_verses=discovered,
+        selected_verses=selected,
+        evidence_items=[_verse_to_evidence(v) for v in selected],
+    )

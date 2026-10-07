@@ -2,52 +2,33 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
+from quran_scholar.agents.helpers import (
+    make_evidence,
+    result,
+    selected_verses,
+    session_error,
+    start_trace,
+    task_id,
+)
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
-from quran_scholar.models import Evidence, NuzoolEvidence, ResearchPlan, VerseEvidence
+from quran_scholar.models import NuzoolEvidence
 from quran_scholar.state import ResearchState
-from quran_scholar.trace import trace, trace_lines
+from quran_scholar.trace import trace
 
 
-def _verses(state: ResearchState) -> list[VerseEvidence]:
-    selected = list(state.get("selected_verses") or [])
-    if selected:
-        return selected
-    plan: ResearchPlan | None = state.get("research_plan")
-    if plan and plan.primary_verse:
-        return [
-            VerseEvidence(
-                ref=plan.primary_verse,
-                text_uthmani="",
-                source_tool="plan.primary_verse",
-            )
-        ]
-    return []
-
-
-def _classify_nuzool_source(
-    surah: int,
-    ayah: int,
-    entry: dict[str, Any],
-) -> NuzoolEvidence:
-    """Map one MCP nuzool source block to FOUND / NOT_AVAILABLE."""
-    attribution = entry.get("attribution")
-    source = (
-        str(attribution)
-        if attribution
-        else str(entry.get("source") or "nuzool")
+def _classify(surah: int, ayah: int, entry: dict[str, Any]) -> NuzoolEvidence:
+    source = str(
+        entry.get("attribution") or entry.get("source") or "nuzool"
     )
     text = entry.get("text")
-    available = entry.get("available")
     reason = entry.get("reason")
 
-    # Explicit not available from MCP
-    if available is False:
+    if entry.get("available") is False:
         return NuzoolEvidence(
             status="NOT_AVAILABLE",
             content=str(reason) if reason else "لم يثبت سبب نزول لهذه الآية",
@@ -56,8 +37,6 @@ def _classify_nuzool_source(
             ayah_number=ayah,
             raw=entry,
         )
-
-    # Found textual asbab
     if isinstance(text, str) and text.strip():
         return NuzoolEvidence(
             status="FOUND",
@@ -65,11 +44,9 @@ def _classify_nuzool_source(
             source=source,
             surah_number=surah,
             ayah_number=ayah,
-            isnad=str(entry.get("isnad")) if entry.get("isnad") else None,
+            isnad=str(entry["isnad"]) if entry.get("isnad") else None,
             raw=entry,
         )
-
-    # Ambiguous empty payload → treat as not available (not ERROR)
     return NuzoolEvidence(
         status="NOT_AVAILABLE",
         content=str(reason) if reason else "لا تتوفر بيانات سبب نزول لهذه الآية",
@@ -80,61 +57,22 @@ def _classify_nuzool_source(
     )
 
 
-def _nuzool_to_evidence(item: NuzoolEvidence) -> Evidence | None:
-    """Only FOUND nuzool becomes positive evidence; others stay in nuzool_evidence."""
-    if item.status != "FOUND" or not item.content:
-        return None
-    from quran_scholar.services.citation_manager import citation_manager
-
-    ev = Evidence(
-        id=f"nuzool-{item.surah_number}-{item.ayah_number}-{uuid.uuid4().hex[:8]}",
-        kind="nuzool",
-        content=item.content,
-        citation="",
-        refs=[item.ref],
-        metadata={
-            "status": item.status,
-            "source_id": "nuzool",
-            "attribution": item.source,
-            "source_tool": item.source_tool,
-            "raw": item.raw,
-        },
-    )
-    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
-
-
 def run_context_research(state: ResearchState) -> dict:
-    """
-    Fetch أسباب النزول for selected verses.
-
-    Each verse gets an explicit status:
-    - FOUND — text retrieved
-    - NOT_AVAILABLE — MCP request succeeded; no asbab for this ayah
-    - ERROR — MCP request failed (never treat as NOT_AVAILABLE)
-    """
-    task_id = state.get("current_task_id") or ""
-    verses = _verses(state)
+    """Fetch أسباب النزول. ERROR = MCP failed; NOT_AVAILABLE = empty success."""
+    tid = task_id(state)
+    verses = selected_verses(state)
     warnings: list[str] = []
-    errors: list[str] = []
-    lines: list[str] = [
-        trace(
-            "context_researcher",
-            "Checking asbab al-nuzool...",
-            blank_before=True,
-        )
-    ]
+    lines = start_trace("context_researcher", "Checking asbab al-nuzool...")
 
     if not verses:
-        lines.append(
-            trace("context_researcher", "Skipped — no selected verses.")
+        lines.append(trace("context_researcher", "Skipped — no selected verses."))
+        return result(
+            tid,
+            traces=lines,
+            warnings=["context_researcher: no selected_verses"],
         )
-        return {
-            "warnings": ["context_researcher: no selected_verses"],
-            "completed_task_ids": [task_id] if task_id else [],
-            **trace_lines(*lines),
-        }
 
-    nuzool_items: list[NuzoolEvidence] = []
+    items: list[NuzoolEvidence] = []
 
     try:
         with ScopedTafsirMCPClient("context") as client:
@@ -149,7 +87,7 @@ def run_context_research(state: ResearchState) -> dict:
                 warnings.extend(outcome.warnings)
 
                 if outcome.failed:
-                    nuzool_items.append(
+                    items.append(
                         NuzoolEvidence(
                             status="ERROR",
                             content=outcome.error or "MCP request failed",
@@ -166,11 +104,10 @@ def run_context_research(state: ResearchState) -> dict:
                     warnings.extend(
                         mark_empty(
                             outcome,
-                            f"NO_EVIDENCE: MCP succeeded but unexpected payload "
-                            f"for nuzool {surah}:{ayah}",
+                            f"NO_EVIDENCE: unexpected nuzool payload for {surah}:{ayah}",
                         )
                     )
-                    nuzool_items.append(
+                    items.append(
                         NuzoolEvidence(
                             status="NOT_AVAILABLE",
                             content="Unexpected MCP payload shape (request succeeded)",
@@ -186,18 +123,15 @@ def run_context_research(state: ResearchState) -> dict:
                 if isinstance(sources, list) and sources:
                     for entry in sources:
                         if isinstance(entry, dict):
-                            nuzool_items.append(
-                                _classify_nuzool_source(surah, ayah, entry)
-                            )
+                            items.append(_classify(surah, ayah, entry))
                 else:
                     warnings.extend(
                         mark_empty(
                             outcome,
-                            f"NO_EVIDENCE: MCP succeeded but no nuzool sources "
-                            f"for {surah}:{ayah}",
+                            f"NO_EVIDENCE: no nuzool sources for {surah}:{ayah}",
                         )
                     )
-                    nuzool_items.append(
+                    items.append(
                         NuzoolEvidence(
                             status="NOT_AVAILABLE",
                             content="No nuzool sources returned for this ayah",
@@ -208,52 +142,59 @@ def run_context_research(state: ResearchState) -> dict:
                         )
                     )
     except MCPError as exc:
-        msg = f"Nuzool retrieval failed (MCP session — not 'no nuzool'): {exc}"
-        lines.append(trace("context_researcher", f"MCP session failed: {exc}"))
         for v in verses:
-            nuzool_items.append(
+            items.append(
                 NuzoolEvidence(
                     status="ERROR",
-                    content=msg,
+                    content=str(exc),
                     source=None,
                     surah_number=v.ref.surah,
                     ayah_number=v.ref.ayah,
                     raw={"error": str(exc)},
                 )
             )
-        return {
-            "nuzool_evidence": nuzool_items,
-            "warnings": [msg],
-            "errors": [msg],
-            "completed_task_ids": [task_id] if task_id else [],
-            **trace_lines(*lines),
-        }
+        return session_error(
+            "context_researcher",
+            "Nuzool retrieval",
+            exc,
+            tid,
+            lines,
+            nuzool_evidence=items,
+        )
 
-    evidence = [
-        e for e in (_nuzool_to_evidence(n) for n in nuzool_items) if e is not None
-    ]
     counts = {
-        "FOUND": sum(1 for n in nuzool_items if n.status == "FOUND"),
-        "NOT_AVAILABLE": sum(1 for n in nuzool_items if n.status == "NOT_AVAILABLE"),
-        "ERROR": sum(1 for n in nuzool_items if n.status == "ERROR"),
+        "FOUND": sum(1 for n in items if n.status == "FOUND"),
+        "NOT_AVAILABLE": sum(1 for n in items if n.status == "NOT_AVAILABLE"),
+        "ERROR": sum(1 for n in items if n.status == "ERROR"),
     }
     lines.append(
         trace(
             "context_researcher",
             f"Nuzool results — FOUND={counts['FOUND']}, "
-            f"NOT_AVAILABLE={counts['NOT_AVAILABLE']}, "
-            f"ERROR={counts['ERROR']}.",
+            f"NOT_AVAILABLE={counts['NOT_AVAILABLE']}, ERROR={counts['ERROR']}.",
         )
     )
-    updates: dict[str, Any] = {
-        "nuzool_evidence": nuzool_items,
-        "evidence_items": evidence,
-        "warnings": warnings
-        + [f"context_researcher: nuzool status counts={counts}"],
-        **trace_lines(*lines),
-    }
-    if task_id:
-        updates["completed_task_ids"] = [task_id]
-    if errors:
-        updates["errors"] = errors
-    return updates
+    evidence = [
+        make_evidence(
+            kind="nuzool",
+            content=n.content or "",
+            refs=[n.ref],
+            id_prefix=f"nuzool-{n.surah_number}-{n.ayah_number}",
+            metadata={
+                "status": n.status,
+                "source_id": "nuzool",
+                "attribution": n.source,
+                "source_tool": n.source_tool,
+                "raw": n.raw,
+            },
+        )
+        for n in items
+        if n.status == "FOUND" and n.content
+    ]
+    return result(
+        tid,
+        traces=lines,
+        warnings=warnings + [f"context_researcher: nuzool status counts={counts}"],
+        nuzool_evidence=items,
+        evidence_items=evidence,
+    )
