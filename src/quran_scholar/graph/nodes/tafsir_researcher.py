@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.graph.nodes.helpers import make_evidence, pack, selected_verses, session_fail
+from quran_scholar.graph.nodes.helpers import make_evidence, pack, selected_verses
 from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
     parse_tool_json,
@@ -17,7 +17,6 @@ from quran_scholar.graph.nodes.mcp_agent import (
     tool_had_mcp_error,
 )
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
-from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import ResearchPlan, TafsirEvidence, VerseRef
@@ -226,36 +225,33 @@ def run_tafsir_research(state: ResearchState) -> dict:
     mcp_failures = empty_results = 0
     tools_used: list[str] = []
 
-    try:
-        if has_llm_credentials():
-            agent_out = run_researcher_agent(
-                role="tafsir",
-                system_prompt=TAFSIR_SYSTEM,
-                user_message=user_msg,
-                response_format=TafsirAgentSummary,
-                name="tafsir_researcher",
+    if has_llm_credentials():
+        agent_out = run_researcher_agent(
+            role="tafsir",
+            system_prompt=TAFSIR_SYSTEM,
+            user_message=user_msg,
+            response_format=TafsirAgentSummary,
+            name="tafsir_researcher",
+        )
+        warnings.extend(agent_out.warnings)
+        tools_used = agent_out.tools_used
+        items, w2, mcp_failures = _items_from_tool_calls(agent_out.tool_calls)
+        warnings.extend(w2)
+        if not items and verses:
+            # Agent failed to gather — fall back to direct fetch
+            warnings.append(
+                "tafsir_researcher: agent produced no excerpts — "
+                "falling back to fetch_tafsir"
             )
-            warnings.extend(agent_out.warnings)
-            tools_used = agent_out.tools_used
-            items, w2, mcp_failures = _items_from_tool_calls(agent_out.tool_calls)
-            warnings.extend(w2)
-            if not items and verses:
-                # Agent failed to gather — fall back to direct fetch
-                warnings.append(
-                    "tafsir_researcher: agent produced no excerpts — "
-                    "falling back to fetch_tafsir"
-                )
-                items, w3, mcp_failures, empty_results = _deterministic_fetch(
-                    verses, sources
-                )
-                warnings.extend(w3)
-                tools_used = tools_used or ["fetch_tafsir"]
-        else:
-            items, w, mcp_failures, empty_results = _deterministic_fetch(verses, sources)
-            warnings.extend(w)
-            tools_used = ["fetch_tafsir"]
-    except MCPError as exc:
-        return session_fail("tafsir_researcher", "Tafsir retrieval", exc, tid)
+            items, w3, mcp_failures, empty_results = _deterministic_fetch(
+                verses, sources
+            )
+            warnings.extend(w3)
+            tools_used = tools_used or ["fetch_tafsir"]
+    else:
+        items, w, mcp_failures, empty_results = _deterministic_fetch(verses, sources)
+        warnings.extend(w)
+        tools_used = ["fetch_tafsir"]
 
     return pack(
         tid,

@@ -70,14 +70,3 @@ def pack(
     if tid:
         out["completed_task_ids"] = [tid]
     return out
-
-
-def session_fail(
-    agent: str,
-    what: str,
-    exc: BaseException,
-    tid: str,
-    **extra: Any,
-) -> dict[str, Any]:
-    msg = f"{what} failed (MCP session — not 'no evidence'): {exc}"
-    return pack(tid, warnings=[msg], errors=[msg], **extra)

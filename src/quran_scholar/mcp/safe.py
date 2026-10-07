@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from quran_scholar.mcp.errors import MCPError
-from quran_scholar.mcp.toolsets import ToolNotAllowedError
+from quran_scholar.mcp.errors import ToolNotAllowedError
 
 
 @dataclass

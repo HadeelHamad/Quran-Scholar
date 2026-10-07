@@ -1,14 +1,14 @@
 # Quran Scholar
 
-A multi-agent system for **any Quran-related question** — not only tafsir.
+A Multi-Agent Quranic Research
 
 The Planner builds a minimal investigation plan; specialized researchers use
 [Tafsir MCP](https://tafsirmcp.netlify.app/) tools (as needed) for Quran text,
-search, surah/overview/stats/qira'at, classical tafsir, linguistics, and asbab
+search, surah/overview/stats, classical tafsir, linguistics, and asbab
 al-nuzool. Answers stay cited instead of hallucinated.
 
 **Examples:** thematic verses · verse lookup · tafsir / mufassir comparison ·
-word roots · reasons of revelation · surah info / statistics / qira'at.
+word roots · reasons of revelation · surah info / statistics.
 
 **Input:** questions in **Modern Standard Arabic**. Final report is Arabic;
 `language` defaults to `ar`.
@@ -123,7 +123,7 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 | --- | --- |
 | **Planner** | Minimal research plan (which evidence types / tasks). Does not answer. |
 | **Research Manager** | Next researcher wave(s), optionally parallel; then gap / comparison / finish. |
-| **Quran Researcher** | Text + meta MCP tools (`fetch_ayah`, search, surah info, stats, qira'at, …). |
+| **Quran Researcher** | Text + meta MCP tools (`fetch_ayah`, search, surah info, stats, …). |
 | **Tafsir Researcher** | Classical commentary **when planned**. |
 | **Linguistic Researcher** | Word/root study **when planned**. |
 | **Context Researcher** | Asbab al-nuzool **when planned**. |

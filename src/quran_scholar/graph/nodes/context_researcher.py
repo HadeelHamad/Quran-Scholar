@@ -11,7 +11,6 @@ from quran_scholar.graph.nodes.helpers import (
     make_evidence,
     pack,
     selected_verses,
-    session_fail,
 )
 from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
@@ -20,7 +19,6 @@ from quran_scholar.graph.nodes.mcp_agent import (
     tool_had_mcp_error,
 )
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
-from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import NuzoolEvidence
@@ -221,48 +219,28 @@ def run_context_research(state: ResearchState) -> dict:
     items: list[NuzoolEvidence] = []
     tools_used: list[str] = []
 
-    try:
-        if has_llm_credentials():
-            agent_out = run_researcher_agent(
-                role="context",
-                system_prompt=CONTEXT_SYSTEM,
-                user_message=user_msg,
-                response_format=ContextAgentSummary,
-                name="context_researcher",
-            )
-            warnings.extend(agent_out.warnings)
-            tools_used = agent_out.tools_used
-            items, w2 = _items_from_tool_calls(agent_out.tool_calls)
-            warnings.extend(w2)
-            if not items:
-                warnings.append(
-                    "context_researcher: agent empty — deterministic fallback"
-                )
-                items, w3 = _deterministic_nuzool(verses)
-                warnings.extend(w3)
-        else:
-            items, w = _deterministic_nuzool(verses)
-            warnings.extend(w)
-            tools_used = ["fetch_nuzool_reason"]
-    except MCPError as exc:
-        for v in verses:
-            items.append(
-                NuzoolEvidence(
-                    status="ERROR",
-                    content=str(exc),
-                    source=None,
-                    surah_number=v.ref.surah,
-                    ayah_number=v.ref.ayah,
-                    raw={"error": str(exc)},
-                )
-            )
-        return session_fail(
-            "context_researcher",
-            "Nuzool retrieval",
-            exc,
-            tid,
-            nuzool_evidence=items,
+    if has_llm_credentials():
+        agent_out = run_researcher_agent(
+            role="context",
+            system_prompt=CONTEXT_SYSTEM,
+            user_message=user_msg,
+            response_format=ContextAgentSummary,
+            name="context_researcher",
         )
+        warnings.extend(agent_out.warnings)
+        tools_used = agent_out.tools_used
+        items, w2 = _items_from_tool_calls(agent_out.tool_calls)
+        warnings.extend(w2)
+        if not items:
+            warnings.append(
+                "context_researcher: agent empty — deterministic fallback"
+            )
+            items, w3 = _deterministic_nuzool(verses)
+            warnings.extend(w3)
+    else:
+        items, w = _deterministic_nuzool(verses)
+        warnings.extend(w)
+        tools_used = ["fetch_nuzool_reason"]
 
     counts = {
         "FOUND": sum(1 for n in items if n.status == "FOUND"),

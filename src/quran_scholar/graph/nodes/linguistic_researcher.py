@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.graph.nodes.helpers import make_evidence, pack, session_fail
+from quran_scholar.graph.nodes.helpers import make_evidence, pack
 from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
     parse_tool_json,
@@ -16,7 +16,6 @@ from quran_scholar.graph.nodes.mcp_agent import (
     tool_had_mcp_error,
 )
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
-from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import safe_call_tool
 from quran_scholar.models import LinguisticEvidence, ResearchPlan, VerseRef
@@ -242,32 +241,28 @@ def run_linguistic_research(state: ResearchState) -> dict:
     warnings: list[str] = []
     tools_used: list[str] = []
 
-    try:
-        if has_llm_credentials():
-            agent_out = run_researcher_agent(
-                role="linguistic",
-                system_prompt=LING_SYSTEM,
-                user_message=user_msg,
-                response_format=LinguisticAgentSummary,
-                name="linguistic_researcher",
+    if has_llm_credentials():
+        agent_out = run_researcher_agent(
+            role="linguistic",
+            system_prompt=LING_SYSTEM,
+            user_message=user_msg,
+            response_format=LinguisticAgentSummary,
+            name="linguistic_researcher",
+        )
+        warnings.extend(agent_out.warnings)
+        tools_used = agent_out.tools_used
+        items, w2 = _items_from_tool_calls(agent_out.tool_calls)
+        warnings.extend(w2)
+        if not items:
+            warnings.append(
+                "linguistic_researcher: agent empty — deterministic fallback"
             )
-            warnings.extend(agent_out.warnings)
-            tools_used = agent_out.tools_used
-            items, w2 = _items_from_tool_calls(agent_out.tool_calls)
-            warnings.extend(w2)
-            if not items:
-                warnings.append(
-                    "linguistic_researcher: agent empty — deterministic fallback"
-                )
-                items, w3 = _deterministic_linguistic(verses, question)
-                warnings.extend(w3)
-        else:
-            items, w = _deterministic_linguistic(verses, question)
-            warnings.extend(w)
-            tools_used = ["analyze_word"]
-    except MCPError as exc:
-        return session_fail(
-            "linguistic_researcher", "Linguistic retrieval", exc, tid)
+            items, w3 = _deterministic_linguistic(verses, question)
+            warnings.extend(w3)
+    else:
+        items, w = _deterministic_linguistic(verses, question)
+        warnings.extend(w)
+        tools_used = ["analyze_word"]
 
     return pack(
         tid,

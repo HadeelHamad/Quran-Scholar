@@ -1,4 +1,4 @@
-"""Tafsir MCP client over Streamable HTTP (remote) or documented local uvx mode.
+"""Tafsir MCP client over Streamable HTTP.
 
 Uses httpx so we do not require fastmcp/cryptography native builds.
 Endpoint docs: https://tafsirmcp.netlify.app/ · https://mcp.tafsir.net/mcp
@@ -16,10 +16,10 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
 
 from quran_scholar.mcp.errors import (
-    MCPError,
     MCPNetworkError,
     MCPProtocolError,
     MCPToolError,
+    TafsirMCPError,
 )
 from quran_scholar.mcp.toolsets import (
     ALL_PROJECT_TOOLS,
@@ -29,10 +29,6 @@ from quran_scholar.mcp.toolsets import (
 )
 
 DEFAULT_TAFSIR_MCP_URL = "https://mcp.tafsir.net/mcp"
-
-
-class TafsirMCPError(MCPError):
-    """Raised when the Tafsir MCP HTTP session fails."""
 
 
 class TafsirMCPClient:
@@ -288,14 +284,6 @@ def get_tafsir_mcp_tools(
     Prefer ``role=`` so each agent only sees its focused toolset.
     Caller owns the client lifecycle (call ``client.close()`` when done).
     """
-    mode = os.getenv("TAFSIR_MCP_MODE", "http").strip().lower()
-    if mode == "local":
-        raise TafsirMCPError(
-            "TAFSIR_MCP_MODE=local requires a running MCP stdio bridge. "
-            "Use TAFSIR_MCP_MODE=http (default) against "
-            f"{DEFAULT_TAFSIR_MCP_URL}, or set TAFSIR_MCP_URL to your proxy."
-        )
-
     client = TafsirMCPClient(url=url)
     client.initialize()
     catalog = client.list_tools()

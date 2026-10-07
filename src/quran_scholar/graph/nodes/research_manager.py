@@ -28,14 +28,6 @@ KIND_TO_ACTION = {
     "context": "context_research",
 }
 
-# Preference order when several researchers are ready in one wave.
-RESEARCHER_ORDER = (
-    "quran_research",
-    "linguistic_research",
-    "tafsir_research",
-    "context_research",
-)
-
 _NEEDS_VERSES = frozenset(
     {"tafsir_research", "linguistic_research", "context_research"}
 )
@@ -75,15 +67,12 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
                 continue
             by_action[action] = task
 
-    ordered = [(a, by_action[a]) for a in RESEARCHER_ORDER if a in by_action]
-    seen = {a for a, _ in ordered}
-    ordered += [(a, t) for a, t in by_action.items() if a not in seen]
-
-    if ordered:
+    ready = list(by_action.items())
+    if ready:
         # All dependency-ready researchers in this wave run in parallel.
         dispatches = [
             ResearchDispatch(action=a, task_id=t.id)  # type: ignore[arg-type]
-            for a, t in ordered
+            for a, t in ready
         ]
         mode = "parallel" if len(dispatches) > 1 else "single"
         return decision(

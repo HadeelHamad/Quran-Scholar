@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from quran_scholar.mcp.errors import ToolNotAllowedError
+
 ResearcherRole = Literal[
     "quran",
     "tafsir",
@@ -20,8 +22,6 @@ TOOLSETS: dict[ResearcherRole, frozenset[str]] = {
             "fetch_surah_info",
             "get_quran_overview",
             "get_surah_statistics",
-            "get_qeraat_variants",
-            "get_page_fawaed",
         }
     ),
     "linguistic": frozenset(
@@ -49,10 +49,6 @@ TOOLSETS: dict[ResearcherRole, frozenset[str]] = {
 }
 
 ALL_PROJECT_TOOLS: frozenset[str] = frozenset().union(*TOOLSETS.values())
-
-
-class ToolNotAllowedError(PermissionError):
-    """Raised when a researcher calls an MCP tool outside its toolset."""
 
 
 def tools_for(role: ResearcherRole) -> frozenset[str]:
