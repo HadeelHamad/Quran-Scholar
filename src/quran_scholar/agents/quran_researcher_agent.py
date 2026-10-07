@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.agents.helpers import make_evidence, result, session_error, start_trace, task_id
+from quran_scholar.agents.helpers import make_evidence, pack, session_fail
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.config import quran_search_limit
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
@@ -219,20 +219,6 @@ def _evaluate_selection(
         ]
 
 
-def _verse_to_evidence(v: VerseEvidence):
-    return make_evidence(
-        kind="verse",
-        content=v.text_uthmani,
-        refs=[v.ref],
-        id_prefix=f"verse-{v.ref.surah}-{v.ref.ayah}",
-        metadata={
-            "source_tool": v.source_tool,
-            "relevance": v.relevance,
-            "raw": v.raw,
-        },
-    )
-
-
 def run_quran_research(state: ResearchState) -> dict:
     """
     Find relevant verses.
@@ -244,13 +230,13 @@ def run_quran_research(state: ResearchState) -> dict:
     question = state.get("user_question") or ""
     language = state.get("language") or "ar"
     plan: ResearchPlan | None = state.get("research_plan")
-    tid = task_id(state)
+    tid = state.get("current_task_id") or ""
     warnings: list[str] = []
 
     discovered: list[VerseEvidence] = []
     selected: list[VerseEvidence] = []
     mcp_failures = 0
-    lines = start_trace("quran_researcher", "Searching Quran...")
+    lines = [trace("quran_researcher", "Searching Quran...", blank_before=True)]
 
     try:
         with ScopedTafsirMCPClient("quran") as client:
@@ -362,11 +348,11 @@ def run_quran_research(state: ResearchState) -> dict:
                 )
             )
     except MCPError as exc:
-        return session_error("quran_researcher", "Quran retrieval", exc, tid, lines)
+        return session_fail("quran_researcher", "Quran retrieval", exc, tid, lines)
 
-    return result(
+    return pack(
         tid,
-        traces=lines,
+        lines=lines,
         warnings=warnings
         + [
             f"quran_researcher: discovered={len(discovered)} "
@@ -374,5 +360,18 @@ def run_quran_research(state: ResearchState) -> dict:
         ],
         discovered_verses=discovered,
         selected_verses=selected,
-        evidence_items=[_verse_to_evidence(v) for v in selected],
+        evidence_items=[
+            make_evidence(
+                kind="verse",
+                content=v.text_uthmani,
+                refs=[v.ref],
+                id_prefix=f"verse-{v.ref.surah}-{v.ref.ayah}",
+                metadata={
+                    "source_tool": v.source_tool,
+                    "relevance": v.relevance,
+                    "raw": v.raw,
+                },
+            )
+            for v in selected
+        ],
     )

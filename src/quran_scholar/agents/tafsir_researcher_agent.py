@@ -3,16 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
-
-from quran_scholar.agents.helpers import (
-    make_evidence,
-    result,
-    selected_verses,
-    session_error,
-    start_trace,
-    task_id,
-)
+from quran_scholar.agents.helpers import make_evidence, pack, selected_verses, session_fail
 from quran_scholar.config import configured_tafsir_sources
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
@@ -27,51 +18,27 @@ _ATTRIB_RE = re.compile(
 )
 
 
-def _parse_attribution(attr: str | None) -> tuple[str | None, str | None, str | None]:
-    if not attr:
-        return None, None, None
-    match = _ATTRIB_RE.match(attr.strip())
-    if not match:
-        return attr, None, None
-    return (
-        match.group("title").strip() or None,
-        match.group("author").strip() or None,
-        match.group("death").strip() or None,
-    )
-
-
-def _sources(plan: ResearchPlan | None) -> list[str]:
-    if plan and plan.target_tafsir_sources:
-        return configured_tafsir_sources(plan.target_tafsir_sources)
-    return configured_tafsir_sources(None)
-
-
-def _tafsir_records(raw: Any) -> list[dict[str, Any]]:
-    payload = mcp_payload(raw)
-    if isinstance(payload, dict) and isinstance(payload.get("tafsirs"), list):
-        return [x for x in payload["tafsirs"] if isinstance(x, dict)]
-    return as_list(raw)
-
-
 def run_tafsir_research(state: ResearchState) -> dict:
     """Retrieve tafsir. MCP failures are warnings — never 'no tafsir exists'."""
-    tid = task_id(state)
+    tid = state.get("current_task_id") or ""
     verses = selected_verses(state)
-    sources = _sources(state.get("research_plan"))
+    plan: ResearchPlan | None = state.get("research_plan")
+    sources = configured_tafsir_sources(
+        plan.target_tafsir_sources if plan and plan.target_tafsir_sources else None
+    )
     warnings: list[str] = []
-    lines = start_trace("tafsir_researcher", "Retrieving tafsir...")
+    lines = [trace("tafsir_researcher", "Retrieving tafsir...", blank_before=True)]
 
     if not verses:
         lines.append(trace("tafsir_researcher", "Skipped — no selected verses yet."))
-        return result(
+        return pack(
             tid,
-            traces=lines,
+            lines=lines,
             warnings=["tafsir_researcher: no selected_verses to fetch"],
         )
 
     items: list[TafsirEvidence] = []
-    mcp_failures = 0
-    empty_results = 0
+    mcp_failures = empty_results = 0
 
     try:
         with ScopedTafsirMCPClient("tafsir") as client:
@@ -88,11 +55,14 @@ def run_tafsir_research(state: ResearchState) -> dict:
                     mcp_failures += 1
                     continue
 
-                usable = [
-                    rec
-                    for rec in _tafsir_records(outcome.data)
-                    if str(rec.get("text") or "").strip()
-                ]
+                payload = mcp_payload(outcome.data)
+                records = (
+                    [x for x in payload["tafsirs"] if isinstance(x, dict)]
+                    if isinstance(payload, dict)
+                    and isinstance(payload.get("tafsirs"), list)
+                    else as_list(outcome.data)
+                )
+                usable = [r for r in records if str(r.get("text") or "").strip()]
                 if not usable:
                     empty_results += 1
                     warnings.extend(
@@ -105,11 +75,16 @@ def run_tafsir_research(state: ResearchState) -> dict:
                     continue
 
                 for rec in usable:
-                    title, author, death = _parse_attribution(
-                        rec.get("attribution")
-                        if isinstance(rec.get("attribution"), str)
-                        else None
-                    )
+                    attr = rec.get("attribution")
+                    title = author = death = None
+                    if isinstance(attr, str) and attr.strip():
+                        match = _ATTRIB_RE.match(attr.strip())
+                        if match:
+                            title = match.group("title").strip() or None
+                            author = match.group("author").strip() or None
+                            death = match.group("death").strip() or None
+                        else:
+                            title = attr
                     items.append(
                         TafsirEvidence(
                             ref=VerseRef(surah=ref.surah, ayah=ref.ayah),
@@ -125,7 +100,7 @@ def run_tafsir_research(state: ResearchState) -> dict:
                         )
                     )
     except MCPError as exc:
-        return session_error("tafsir_researcher", "Tafsir retrieval", exc, tid, lines)
+        return session_fail("tafsir_researcher", "Tafsir retrieval", exc, tid, lines)
 
     n_sources = len({t.source_id for t in items})
     lines.append(
@@ -139,27 +114,9 @@ def run_tafsir_research(state: ResearchState) -> dict:
             ),
         )
     )
-    evidence = [
-        make_evidence(
-            kind="tafsir",
-            content=t.text,
-            refs=[t.ref],
-            id_prefix=f"tafsir-{t.source_id}-{t.ref.surah}-{t.ref.ayah}",
-            metadata={
-                "source_id": t.source_id,
-                "source_title": t.source_title,
-                "author": t.author,
-                "death_year_hijri": t.death_year_hijri,
-                "source_tool": t.source_tool,
-                "raw": t.raw,
-                "raw_tafsir": True,
-            },
-        )
-        for t in items
-    ]
-    return result(
+    return pack(
         tid,
-        traces=lines,
+        lines=lines,
         warnings=warnings
         + [
             f"tafsir_researcher: fetched={len(items)} "
@@ -167,5 +124,22 @@ def run_tafsir_research(state: ResearchState) -> dict:
             f"sources={sources}"
         ],
         tafsir_evidence=items,
-        evidence_items=evidence,
+        evidence_items=[
+            make_evidence(
+                kind="tafsir",
+                content=t.text,
+                refs=[t.ref],
+                id_prefix=f"tafsir-{t.source_id}-{t.ref.surah}-{t.ref.ayah}",
+                metadata={
+                    "source_id": t.source_id,
+                    "source_title": t.source_title,
+                    "author": t.author,
+                    "death_year_hijri": t.death_year_hijri,
+                    "source_tool": t.source_tool,
+                    "raw": t.raw,
+                    "raw_tafsir": True,
+                },
+            )
+            for t in items
+        ],
     )

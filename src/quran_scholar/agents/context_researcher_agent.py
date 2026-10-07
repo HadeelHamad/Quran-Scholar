@@ -6,11 +6,9 @@ from typing import Any
 
 from quran_scholar.agents.helpers import (
     make_evidence,
-    result,
+    pack,
     selected_verses,
-    session_error,
-    start_trace,
-    task_id,
+    session_fail,
 )
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
@@ -59,16 +57,16 @@ def _classify(surah: int, ayah: int, entry: dict[str, Any]) -> NuzoolEvidence:
 
 def run_context_research(state: ResearchState) -> dict:
     """Fetch أسباب النزول. ERROR = MCP failed; NOT_AVAILABLE = empty success."""
-    tid = task_id(state)
+    tid = state.get("current_task_id") or ""
     verses = selected_verses(state)
     warnings: list[str] = []
-    lines = start_trace("context_researcher", "Checking asbab al-nuzool...")
+    lines = [trace("context_researcher", "Checking asbab al-nuzool...", blank_before=True)]
 
     if not verses:
         lines.append(trace("context_researcher", "Skipped — no selected verses."))
-        return result(
+        return pack(
             tid,
-            traces=lines,
+            lines=lines,
             warnings=["context_researcher: no selected_verses"],
         )
 
@@ -153,7 +151,7 @@ def run_context_research(state: ResearchState) -> dict:
                     raw={"error": str(exc)},
                 )
             )
-        return session_error(
+        return session_fail(
             "context_researcher",
             "Nuzool retrieval",
             exc,
@@ -191,9 +189,9 @@ def run_context_research(state: ResearchState) -> dict:
         for n in items
         if n.status == "FOUND" and n.content
     ]
-    return result(
+    return pack(
         tid,
-        traces=lines,
+        lines=lines,
         warnings=warnings + [f"context_researcher: nuzool status counts={counts}"],
         nuzool_evidence=items,
         evidence_items=evidence,

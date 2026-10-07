@@ -30,13 +30,8 @@ _ACTION_PHRASES = {
 }
 
 
-def format_trace(agent: str, message: str) -> str:
-    return f"[{AGENT_LABELS.get(agent, agent)}] {message}"
-
-
 def trace(agent: str, message: str, *, blank_before: bool = False) -> str:
-    """Always print a trace line; also return it for state.trace_log."""
-    line = format_trace(agent, message)
+    line = f"[{AGENT_LABELS.get(agent, agent)}] {message}"
     if blank_before:
         print(flush=True)
     print(line, flush=True)
@@ -61,7 +56,6 @@ def manager_trace_message(decision: Any) -> str:
             for d in dispatches
         ]
         return f"Dispatching parallel research: {', '.join(names)}..."
-
     action = getattr(decision, "action", None)
     return _ACTION_PHRASES.get(action, f"Next action: {action}...")
 

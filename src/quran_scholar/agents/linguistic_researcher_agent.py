@@ -11,10 +11,8 @@ from pydantic import BaseModel, Field
 
 from quran_scholar.agents.helpers import (
     make_evidence,
-    result,
-    session_error,
-    start_trace,
-    task_id,
+    pack,
+    session_fail,
 )
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
@@ -41,22 +39,6 @@ _ROOT_FROM_SARF = re.compile(
     r"مَادَّ[ةه][\u064B-\u0652]*\s*[:：]?\s*\(?\s*([ء-ي]{2,5})\s*\)?",
 )
 _ROOT_IN_PARENS = re.compile(r"\(([ء-ي]{2,5})\)")
-
-
-def _should_run(state: ResearchState) -> tuple[bool, str]:
-    plan: ResearchPlan | None = state.get("research_plan")
-    tid = task_id(state)
-    kind = ""
-    if plan and tid:
-        for t in plan.tasks:
-            if t.id == tid:
-                kind = t.kind
-                break
-    if kind in ("linguistic", "linguistic_analysis"):
-        return True, "explicit linguistic task"
-    if plan and plan.needs_linguistic_analysis:
-        return True, "plan.needs_linguistic_analysis"
-    return False, "linguistic analysis not required for this question"
 
 
 def _pick_terms(question: str, verse: VerseEvidence) -> ImportantTerms:
@@ -117,23 +99,34 @@ def _extract_root(analysis: dict[str, Any]) -> str | None:
 
 
 def run_linguistic_research(state: ResearchState) -> dict:
-    tid = task_id(state)
-    lines = start_trace("linguistic_researcher", "Analyzing roots...")
-    should, reason = _should_run(state)
-    if not should:
+    tid = state.get("current_task_id") or ""
+    lines = [trace("linguistic_researcher", "Analyzing roots...", blank_before=True)]
+    plan: ResearchPlan | None = state.get("research_plan")
+    kind = ""
+    if plan and tid:
+        for t in plan.tasks:
+            if t.id == tid:
+                kind = t.kind
+                break
+    if kind in ("linguistic", "linguistic_analysis"):
+        reason = "explicit linguistic task"
+    elif plan and plan.needs_linguistic_analysis:
+        reason = "plan.needs_linguistic_analysis"
+    else:
+        reason = "linguistic analysis not required for this question"
         lines.append(trace("linguistic_researcher", f"Skipped ({reason})."))
-        return result(
+        return pack(
             tid,
-            traces=lines,
+            lines=lines,
             warnings=[f"linguistic_researcher: skipped ({reason})"],
         )
 
     verses = list(state.get("selected_verses") or [])
     if not verses:
         lines.append(trace("linguistic_researcher", "Skipped — no selected verses."))
-        return result(
+        return pack(
             tid,
-            traces=lines,
+            lines=lines,
             warnings=["linguistic_researcher: no selected_verses"],
         )
 
@@ -239,7 +232,7 @@ def run_linguistic_research(state: ResearchState) -> dict:
                     )
                 )
     except MCPError as exc:
-        return session_error(
+        return session_fail(
             "linguistic_researcher", "Linguistic retrieval", exc, tid, lines
         )
 
@@ -265,9 +258,9 @@ def run_linguistic_research(state: ResearchState) -> dict:
         )
         for x in items
     ]
-    return result(
+    return pack(
         tid,
-        traces=lines,
+        lines=lines,
         warnings=warnings
         + [
             f"linguistic_researcher: ran ({reason}); "

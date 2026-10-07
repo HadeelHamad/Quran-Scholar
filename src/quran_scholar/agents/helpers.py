@@ -1,4 +1,4 @@
-"""Shared helpers so researcher agents stay focused on domain logic."""
+"""Shared pack/evidence helpers for researcher agents."""
 
 from __future__ import annotations
 
@@ -11,12 +11,7 @@ from quran_scholar.state import ResearchState
 from quran_scholar.trace import trace, trace_lines
 
 
-def task_id(state: ResearchState) -> str:
-    return state.get("current_task_id") or ""
-
-
 def selected_verses(state: ResearchState) -> list[VerseEvidence]:
-    """Selected verses, or plan.primary_verse as a placeholder."""
     selected = list(state.get("selected_verses") or [])
     if selected:
         return selected
@@ -51,15 +46,20 @@ def make_evidence(
     return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
-def result(
+def pack(
     tid: str,
     *,
-    traces: list[str] | None = None,
+    agent: str | None = None,
+    message: str | None = None,
+    lines: list[str] | None = None,
     warnings: list[str] | None = None,
     errors: list[str] | None = None,
     **fields: Any,
 ) -> dict[str, Any]:
-    """Standard researcher state update."""
+    """Build a researcher state update. Optionally starts a trace line."""
+    traces = list(lines or [])
+    if agent and message:
+        traces.insert(0, trace(agent, message, blank_before=True))
     out: dict[str, Any] = dict(fields)
     if warnings is not None:
         out["warnings"] = warnings
@@ -72,11 +72,7 @@ def result(
     return out
 
 
-def start_trace(agent: str, message: str) -> list[str]:
-    return [trace(agent, message, blank_before=True)]
-
-
-def session_error(
+def session_fail(
     agent: str,
     what: str,
     exc: BaseException,
@@ -84,7 +80,6 @@ def session_error(
     lines: list[str],
     **extra: Any,
 ) -> dict[str, Any]:
-    """MCP session failure — never report as missing evidence."""
     msg = f"{what} failed (MCP session — not 'no evidence'): {exc}"
     lines.append(trace(agent, f"MCP session failed: {exc}"))
-    return result(tid, traces=lines, warnings=[msg], errors=[msg], **extra)
+    return pack(tid, lines=lines, warnings=[msg], errors=[msg], **extra)

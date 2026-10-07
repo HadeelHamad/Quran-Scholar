@@ -1,9 +1,10 @@
-"""Research Manager — pick execution pattern, then next wave or stage."""
+"""Research Manager — pattern + next wave (or post-research stage)."""
 
 from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.models import (
@@ -34,8 +35,7 @@ KIND_TO_ACTION = {
     "context": "context_research",
 }
 
-# Order used when picking the next sequential step (and sorting parallel waves)
-PATTERN_ORDER: dict[ExecutionPattern, list[str]] = {
+PATTERN_ORDER = {
     ExecutionPattern.THEMATIC: [
         "quran_research",
         "linguistic_research",
@@ -48,19 +48,12 @@ PATTERN_ORDER: dict[ExecutionPattern, list[str]] = {
         "linguistic_research",
         "context_research",
     ],
-    ExecutionPattern.TAFSIR_COMPARISON: [
-        "quran_research",
-        "tafsir_research",
-    ],
+    ExecutionPattern.TAFSIR_COMPARISON: ["quran_research", "tafsir_research"],
 }
 
 _NEEDS_VERSES = frozenset(
     {"tafsir_research", "linguistic_research", "context_research"}
 )
-
-MANAGER_SYSTEM = """You are the Research Manager for Quran Scholar.
-Choose ONE next action: gap_analysis, comparison, verification, or finish.
-Do not choose researcher actions. Do not invent node names."""
 
 
 def choose_execution_pattern(plan: ResearchPlan | None) -> ExecutionPattern:
@@ -77,62 +70,41 @@ def choose_execution_pattern(plan: ResearchPlan | None) -> ExecutionPattern:
     return ExecutionPattern.VERSE_SPECIFIC
 
 
-def _decision(
-    action: str,
-    pattern: ExecutionPattern,
-    reasoning: str,
-    *,
-    task_id: str | None = None,
-    dispatches: list[ResearchDispatch] | None = None,
-) -> ResearchDecision:
-    dispatches = dispatches or []
-    return ResearchDecision(
-        action=action,  # type: ignore[arg-type]
-        task_id=task_id,
-        dispatches=dispatches,
-        execution_pattern=pattern,
-        reasoning=reasoning,
-    )
-
-
-def _ready_tasks(plan: ResearchPlan | None, done: set[str]) -> list[ResearchTask]:
-    if plan is None:
-        return []
-    return [
-        t
-        for t in plan.tasks
-        if t.id not in done
-        and t.status != TaskStatus.SKIPPED
-        and all(dep in done for dep in t.depends_on)
-    ]
-
-
-def _pending_researchers(plan: ResearchPlan | None, done: set[str]) -> list[ResearchTask]:
-    if plan is None:
-        return []
-    return [
-        t
-        for t in plan.tasks
-        if t.id not in done
-        and t.status != TaskStatus.SKIPPED
-        and KIND_TO_ACTION.get(t.kind) in RESEARCHER_ACTIONS
-    ]
-
-
-def _research_wave(
-    state: ResearchState, pattern: ExecutionPattern
-) -> ResearchDecision | None:
-    """Next researcher step(s). Thematic may fan out; others stay sequential."""
+def decide_next_action(state: ResearchState) -> ResearchDecision:
+    """Deterministic research waves; optional LLM only after researchers finish."""
     plan = state.get("research_plan")
+    pattern = choose_execution_pattern(plan)
     done = set(state.get("completed_task_ids") or [])
-    has_verses = bool(state.get("selected_verses"))
 
-    # One ready task per action
+    def decision(
+        action: str,
+        reasoning: str,
+        *,
+        task_id: str | None = None,
+        dispatches: list[ResearchDispatch] | None = None,
+    ) -> ResearchDecision:
+        return ResearchDecision(
+            action=action,  # type: ignore[arg-type]
+            task_id=task_id,
+            dispatches=dispatches or [],
+            execution_pattern=pattern,
+            reasoning=reasoning,
+        )
+
+    if state.get("verification_passed"):
+        return decision("finish", "Verification passed.")
+
+    has_verses = bool(state.get("selected_verses"))
     by_action: dict[str, ResearchTask] = {}
-    for task in _ready_tasks(plan, done):
-        action = KIND_TO_ACTION.get(task.kind)
-        if action in RESEARCHER_ACTIONS and action not in by_action:
-            # Tafsir / linguistic / context wait for selected verses
+    if plan:
+        for task in plan.tasks:
+            if task.id in done or task.status == TaskStatus.SKIPPED:
+                continue
+            if not all(dep in done for dep in task.depends_on):
+                continue
+            action = KIND_TO_ACTION.get(task.kind)
+            if action not in RESEARCHER_ACTIONS or action in by_action:
+                continue
             if action in _NEEDS_VERSES and not has_verses:
                 continue
             by_action[action] = task
@@ -141,108 +113,91 @@ def _research_wave(
     ordered = [(a, by_action[a]) for a in order if a in by_action]
     seen = {a for a, _ in ordered}
     ordered += [(a, t) for a, t in by_action.items() if a not in seen]
-    if not ordered:
-        return None
 
-    parallel = pattern == ExecutionPattern.THEMATIC and len(ordered) > 1
-    picks = ordered if parallel else [ordered[0]]
-    dispatches = [
-        ResearchDispatch(action=a, task_id=t.id)  # type: ignore[arg-type]
-        for a, t in picks
-    ]
-    names = [d.action for d in dispatches]
-    mode = "parallel" if parallel else "sequential"
-    return _decision(
-        dispatches[0].action,
-        pattern,
-        f"Pattern {pattern.value}: {mode} {names}",
-        task_id=dispatches[0].task_id,
-        dispatches=dispatches,
+    if ordered:
+        parallel = pattern == ExecutionPattern.THEMATIC and len(ordered) > 1
+        picks = ordered if parallel else [ordered[0]]
+        dispatches = [
+            ResearchDispatch(action=a, task_id=t.id)  # type: ignore[arg-type]
+            for a, t in picks
+        ]
+        mode = "parallel" if parallel else "sequential"
+        return decision(
+            dispatches[0].action,
+            f"Pattern {pattern.value}: {mode} {[d.action for d in dispatches]}",
+            task_id=dispatches[0].task_id,
+            dispatches=dispatches,
+        )
+
+    pending_research = bool(
+        plan
+        and any(
+            t.id not in done
+            and t.status != TaskStatus.SKIPPED
+            and KIND_TO_ACTION.get(t.kind) in RESEARCHER_ACTIONS
+            for t in plan.tasks
+        )
     )
-
-
-def _after_research(
-    state: ResearchState, pattern: ExecutionPattern
-) -> ResearchDecision:
-    """Gap → comparison → verification → finish once researchers are done."""
-    plan = state.get("research_plan")
-    done = set(state.get("completed_task_ids") or [])
     iteration = int(state.get("research_iteration") or 0)
     max_iters = int(state.get("max_research_iterations") or 3)
     gaps = list(state.get("unresolved_gaps") or [])
 
-    if state.get("verification_passed"):
-        return _decision("finish", pattern, "Verification passed.")
-
-    # Still have planned researcher work (e.g. waiting on verses)
-    if _pending_researchers(plan, done):
-        return _decision(
-            "gap_analysis",
-            pattern,
-            "Researcher tasks still pending.",
+    if pending_research:
+        fallback = decision("gap_analysis", "Researcher tasks still pending.")
+    elif gaps and iteration < max_iters:
+        fallback = decision("gap_analysis", "Unresolved gaps remain.")
+    elif plan and plan.needs_tafsir_comparison and not state.get("tafsir_comparisons"):
+        fallback = decision("comparison", "Run tafsir comparison.")
+    elif not state.get("verification_passed"):
+        fallback = (
+            decision("finish", "Iteration budget exhausted.")
+            if iteration >= max_iters
+            else decision("verification", "Run evidence verification.")
         )
+    else:
+        fallback = decision("finish", "Proceed to report.")
 
-    if gaps and iteration < max_iters:
-        return _decision("gap_analysis", pattern, "Unresolved gaps remain.")
-
-    if plan and plan.needs_tafsir_comparison and not state.get("tafsir_comparisons"):
-        return _decision("comparison", pattern, "Run tafsir comparison.")
-
-    if not state.get("verification_passed"):
-        if iteration >= max_iters:
-            return _decision("finish", pattern, "Iteration budget exhausted.")
-        return _decision("verification", pattern, "Run evidence verification.")
-
-    return _decision("finish", pattern, "Proceed to report.")
-
-
-def _llm_after_research(
-    state: ResearchState, pattern: ExecutionPattern
-) -> ResearchDecision | None:
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("your_"):
-        return None
-    plan = state.get("research_plan")
-    payload = {
-        "execution_pattern": pattern.value,
-        "gap_status": state.get("gap_status"),
-        "unresolved_gaps": list(state.get("unresolved_gaps") or []),
-        "needs_tafsir_comparison": bool(plan and plan.needs_tafsir_comparison),
-        "has_comparisons": bool(state.get("tafsir_comparisons")),
-        "verification_passed": state.get("verification_passed"),
-        "research_iteration": state.get("research_iteration"),
-        "max_research_iterations": state.get("max_research_iterations"),
-    }
+        return fallback
+
     try:
-        decision = get_llm().with_structured_output(ResearchDecision).invoke(
+        llm_decision = get_llm().with_structured_output(ResearchDecision).invoke(
             [
-                {"role": "system", "content": MANAGER_SYSTEM},
+                {
+                    "role": "system",
+                    "content": (
+                        "Choose ONE next action: gap_analysis, comparison, "
+                        "verification, or finish. No researcher actions."
+                    ),
+                },
                 {
                     "role": "user",
-                    "content": json.dumps(payload, ensure_ascii=False, default=str),
+                    "content": json.dumps(
+                        {
+                            "execution_pattern": pattern.value,
+                            "gap_status": state.get("gap_status"),
+                            "unresolved_gaps": gaps,
+                            "needs_tafsir_comparison": bool(
+                                plan and plan.needs_tafsir_comparison
+                            ),
+                            "has_comparisons": bool(state.get("tafsir_comparisons")),
+                            "verification_passed": state.get("verification_passed"),
+                            "research_iteration": iteration,
+                            "max_research_iterations": max_iters,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
                 },
             ]
         )
-        if not isinstance(decision, ResearchDecision):
-            decision = ResearchDecision.model_validate(decision)
-        if decision.action in RESEARCHER_ACTIONS:
-            return None
-        return decision.model_copy(
+        if not isinstance(llm_decision, ResearchDecision):
+            llm_decision = ResearchDecision.model_validate(llm_decision)
+        if llm_decision.action in RESEARCHER_ACTIONS:
+            return fallback
+        return llm_decision.model_copy(
             update={"execution_pattern": pattern, "dispatches": []}
         )
     except Exception:
-        return None
-
-
-def decide_next_action(state: ResearchState) -> ResearchDecision:
-    """Deterministic research waves; optional LLM only for post-research stages."""
-    pattern = choose_execution_pattern(state.get("research_plan"))
-
-    if state.get("verification_passed"):
-        return _decision("finish", pattern, "Verification passed.")
-
-    wave = _research_wave(state, pattern)
-    if wave is not None:
-        return wave
-
-    return _llm_after_research(state, pattern) or _after_research(state, pattern)
+        return fallback
