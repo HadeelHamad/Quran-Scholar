@@ -1,4 +1,4 @@
-"""Parse user research questions (Arabic-first)."""
+"""Parse user research questions (Arabic-first, any Quran topic)."""
 
 from __future__ import annotations
 
@@ -67,6 +67,9 @@ def question_mentions_linguistic(question: str) -> bool:
             "كلمة",
             "اللفظ",
             "اشتقاق",
+            "إعراب",
+            "اعراب",
+            "صرف",
         )
     )
 
@@ -75,4 +78,53 @@ def question_mentions_nuzool(question: str) -> bool:
     q = normalize_question_text(question)
     return any(
         term in q for term in ("سبب", "نزول", "أسباب", "اسباب", "نزلت", "نزولها")
+    )
+
+
+def question_mentions_tafsir(question: str) -> bool:
+    q = normalize_question_text(question)
+    return any(
+        term in q
+        for term in (
+            "تفسير",
+            "فسر",
+            "شرح",
+            "مفسر",
+            "المفسرين",
+            "ابن كثير",
+            "السعدي",
+            "الطبري",
+            "البغوي",
+            "الميسر",
+        )
+    )
+
+
+def question_mentions_comparison(question: str) -> bool:
+    q = normalize_question_text(question)
+    return any(
+        term in q for term in ("قارن", "مقارنة", "خلاف", "اختلف", "بين المفسرين")
+    )
+
+
+def question_mentions_meta(question: str) -> bool:
+    """Surah/Quran info, stats, qira'at — not necessarily tafsir."""
+    q = normalize_question_text(question)
+    return any(
+        term in q
+        for term in (
+            "عدد",
+            "إحصاء",
+            "احصاء",
+            "معلومات",
+            "نظرة عامة",
+            "قراءات",
+            "قراءة",
+            "رسم",
+            "مكية",
+            "مدنية",
+            "ترتيب",
+            "فوائد",
+            "صفحة",
+        )
     )

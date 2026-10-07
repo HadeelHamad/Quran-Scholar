@@ -95,13 +95,14 @@ class ResearchPlan(BaseModel):
     required_evidence_types: list[str] = Field(
         default_factory=list,
         description=(
-            "Evidence needed, e.g. quran_text, tafsir, linguistic, nuzool, "
-            "tafsir_comparison (comparison is a downstream stage, not a researcher task)"
+            "Evidence needed for THIS question only, e.g. quran_text, tafsir, "
+            "linguistic, nuzool, tafsir_comparison, surah_info, qiraat, statistics. "
+            "Do not include tafsir unless interpretation is required."
         ),
     )
     needs_tafsir_comparison: bool = Field(
         default=False,
-        description="True when multiple tafsir sources should be compared in analysis",
+        description="True only when multi-mufassir comparison is required",
     )
     needs_linguistic_analysis: bool = Field(
         default=False,
@@ -120,8 +121,12 @@ class ResearchPlan(BaseModel):
         description="Minimal set of researcher tasks; avoid unnecessary steps",
     )
     target_tafsir_sources: list[str] = Field(
-        default_factory=lambda: ["saadi", "katheer", "moyassar"],
-        description="Tafsir MCP source ids when tafsir is needed (e.g. katheer, saadi)",
+        default_factory=list,
+        description=(
+            "Tafsir MCP source ids when tafsir is needed (e.g. katheer, saadi). "
+            "Leave empty when the question does not need tafsir; runtime defaults apply "
+            "only if a tafsir task runs."
+        ),
     )
     primary_verse: VerseRef | None = Field(
         default=None,

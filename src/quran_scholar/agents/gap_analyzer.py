@@ -13,7 +13,9 @@ from quran_scholar.models import ResearchGap, ResearchPlan, ResearchTask, TaskSt
 from quran_scholar.state import ResearchState
 from quran_scholar.trace import trace, trace_lines
 
-SEMANTIC_SYSTEM = """You assess whether collected Quranic research evidence can answer the user's Arabic question.
+SEMANTIC_SYSTEM = """You assess whether collected Quran research evidence can answer the user's Arabic question.
+The question may be about text, themes, tafsir, language, nuzool, surah info, qira'at, or stats —
+only require evidence types that match the plan / question.
 Only ADD gaps clearly still missing. Prefer empty additions if deterministic checks cover them.
 Do NOT answer the religious question itself."""
 
@@ -50,7 +52,14 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
             if t.id not in done and t.status != TaskStatus.SKIPPED
         ]
         types = plan.required_evidence_types or []
-        has_quran = bool(state.get("selected_verses") or state.get("discovered_verses"))
+        has_quran = bool(
+            state.get("selected_verses")
+            or state.get("discovered_verses")
+            or any(
+                getattr(e, "kind", None) == "quran_meta"
+                for e in (state.get("evidence_items") or [])
+            )
+        )
         has_tafsir = bool(state.get("tafsir_evidence"))
         sources = {
             t.source_id
@@ -58,11 +67,24 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
             if getattr(t, "source_id", None)
         }
 
-        needs_quran = True  # project default
-        needs_tafsir = (
-            any("tafsir" in t for t in types)
-            or any(t.kind in ("tafsir_fetch", "fetch_tafsir", "tafsir") for t in plan.tasks)
-            or bool(plan.target_tafsir_sources)
+        needs_quran = (
+            not types
+            or any(
+                t in types
+                for t in (
+                    "quran_text",
+                    "surah_info",
+                    "qiraat",
+                    "statistics",
+                )
+            )
+            or any(
+                t.kind in ("fetch_ayah", "quran_search", "verse_search")
+                for t in plan.tasks
+            )
+        )
+        needs_tafsir = any("tafsir" in t for t in types) or any(
+            t.kind in ("tafsir_fetch", "fetch_tafsir", "tafsir") for t in plan.tasks
         )
         needs_ling = plan.needs_linguistic_analysis or "linguistic" in types
         needs_nuzool = plan.needs_sabab_nuzool or "nuzool" in types

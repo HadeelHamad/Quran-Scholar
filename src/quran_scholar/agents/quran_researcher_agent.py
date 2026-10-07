@@ -1,4 +1,4 @@
-"""Quran Researcher — create_agent + MCP tools (fetch_ayah / search_quran_text)."""
+"""Quran Researcher — create_agent + MCP tools for text, search, surah/meta info."""
 
 from __future__ import annotations
 
@@ -27,18 +27,21 @@ from quran_scholar.trace import trace
 
 QURAN_SYSTEM = """You are the Quran Researcher for Quran Scholar.
 
-You have MCP tools: fetch_ayah and search_quran_text.
-Decide which tool(s) to call for the Arabic user question.
+You answer Quran-related needs using MCP tools (not only verse search):
+fetch_ayah, search_quran_text, fetch_surah_info, get_quran_overview,
+get_surah_statistics, get_qeraat_variants, get_page_fawaed.
+
+Decide which tool(s) fit the Arabic user question.
 
 Guidelines:
-- If a specific surah:ayah is known (from the brief), call fetch_ayah.
-- For thematic questions, call search_quran_text with 1–4 concise ARABIC keyword
-  stems (no English; avoid leading ال). You may call search multiple times.
-- You may combine fetch_ayah and search_quran_text when useful.
-- Prefer precision: do not flood with unrelated hits.
-- NEVER invent verse text or verse numbers. Only use tool results.
-- In the structured response, list selected surah:ayah refs that best answer
-  the question (subset of tool hits), with short relevance notes.
+- Known surah:ayah → fetch_ayah (and get_qeraat_variants if qira'at asked).
+- Thematic / wording search → search_quran_text with 1–4 concise ARABIC stems.
+- Surah metadata / makki-madani / verse counts → fetch_surah_info / get_surah_statistics.
+- Broad corpus questions → get_quran_overview.
+- Page benefits → get_page_fawaed when a page is relevant.
+- Prefer precision; NEVER invent verse text or numbers — only tool results.
+- In structured output, list selected_refs (surah:ayah) when verses matter;
+  leave selected_refs empty for pure meta/stats answers and summarize in notes.
 """
 
 
@@ -116,6 +119,17 @@ def _parse_ref_str(ref: str) -> tuple[int, int] | None:
     return int(m.group(1)), int(m.group(2))
 
 
+_META_TOOLS = frozenset(
+    {
+        "fetch_surah_info",
+        "get_quran_overview",
+        "get_surah_statistics",
+        "get_qeraat_variants",
+        "get_page_fawaed",
+    }
+)
+
+
 def _verses_from_tool_calls(tool_calls: list) -> tuple[list[VerseEvidence], list[str], int]:
     discovered: list[VerseEvidence] = []
     warnings: list[str] = []
@@ -154,6 +168,51 @@ def _verses_from_tool_calls(tool_calls: list) -> tuple[list[VerseEvidence], list
                     if ve:
                         discovered.append(ve)
     return _dedupe_verses(discovered), warnings, mcp_failures
+
+
+def _meta_from_tool_calls(tool_calls: list) -> tuple[list, list[str], int]:
+    """Turn surah/overview/qira'at/stats tool results into evidence items."""
+    items: list = []
+    warnings: list[str] = []
+    mcp_failures = 0
+    for call in tool_calls:
+        if call.name not in _META_TOOLS:
+            continue
+        payload = parse_tool_json(call.content)
+        if tool_had_mcp_error(payload):
+            mcp_failures += 1
+            warnings.append(
+                f"quran_researcher: MCP error on {call.name}: "
+                f"{payload.get('error') if isinstance(payload, dict) else call.content}"
+            )
+            continue
+        data = mcp_payload(payload) if not isinstance(payload, str) else payload
+        if data is None or data == "" or data == [] or data == {}:
+            warnings.append(f"NO_EVIDENCE: {call.name} returned empty payload")
+            continue
+        text = (
+            data
+            if isinstance(data, str)
+            else json.dumps(data, ensure_ascii=False)[:6000]
+        )
+        refs: list[VerseRef] = []
+        if isinstance(call.args.get("surah"), int) or str(
+            call.args.get("surah") or ""
+        ).isdigit():
+            try:
+                refs = [VerseRef(surah=int(call.args["surah"]), ayah=1)]
+            except (KeyError, TypeError, ValueError):
+                refs = []
+        items.append(
+            make_evidence(
+                kind="quran_meta",
+                content=text,
+                refs=refs,
+                id_prefix=f"meta-{call.name}",
+                metadata={"source_tool": call.name, "args": call.args, "raw": data},
+            )
+        )
+    return items, warnings, mcp_failures
 
 
 def _select_from_agent(
@@ -297,11 +356,14 @@ def run_quran_research(state: ResearchState) -> dict:
     }
     user_msg = (
         f"Research brief:\n{json.dumps(brief, ensure_ascii=False)}\n\n"
-        "Call MCP tools to find relevant Quranic verses, then return selected_refs."
+        "Call the MCP tools needed for this Quran-related question "
+        "(verses and/or surah/overview/qira'at/stats). "
+        "Return selected_refs when verses are part of the answer."
     )
 
     discovered: list[VerseEvidence] = []
     selected: list[VerseEvidence] = []
+    meta_evidence: list = []
     mcp_failures = 0
     tools_used: list[str] = []
 
@@ -316,8 +378,11 @@ def run_quran_research(state: ResearchState) -> dict:
             )
             warnings.extend(agent_out.warnings)
             tools_used = agent_out.tools_used
-            discovered, w2, mcp_failures = _verses_from_tool_calls(agent_out.tool_calls)
+            discovered, w2, fail_v = _verses_from_tool_calls(agent_out.tool_calls)
+            meta_evidence, w_meta, fail_m = _meta_from_tool_calls(agent_out.tool_calls)
+            mcp_failures = fail_v + fail_m
             warnings.extend(w2)
+            warnings.extend(w_meta)
             structured = (
                 agent_out.structured
                 if isinstance(agent_out.structured, QuranAgentResult)
@@ -331,7 +396,7 @@ def run_quran_research(state: ResearchState) -> dict:
                         f"Agent called: {', '.join(tools_used)}",
                     )
                 )
-            if not discovered:
+            if not discovered and not meta_evidence:
                 warnings.append(
                     "quran_researcher: agent found nothing — deterministic fallback"
                 )
@@ -357,6 +422,28 @@ def run_quran_research(state: ResearchState) -> dict:
     lines.append(
         trace("quran_researcher", f"Selected {len(selected)} relevant verse(s).")
     )
+    if meta_evidence:
+        lines.append(
+            trace(
+                "quran_researcher",
+                f"Collected {len(meta_evidence)} meta/info evidence item(s).",
+            )
+        )
+
+    verse_evidence = [
+        make_evidence(
+            kind="verse",
+            content=v.text_uthmani,
+            refs=[v.ref],
+            id_prefix=f"verse-{v.ref.surah}-{v.ref.ayah}",
+            metadata={
+                "source_tool": v.source_tool,
+                "relevance": v.relevance,
+                "raw": v.raw,
+            },
+        )
+        for v in selected
+    ]
 
     return pack(
         tid,
@@ -364,23 +451,10 @@ def run_quran_research(state: ResearchState) -> dict:
         warnings=warnings
         + [
             f"quran_researcher: discovered={len(discovered)} "
-            f"selected={len(selected)} mcp_failures={mcp_failures} "
-            f"tools={tools_used}"
+            f"selected={len(selected)} meta={len(meta_evidence)} "
+            f"mcp_failures={mcp_failures} tools={tools_used}"
         ],
         discovered_verses=discovered,
         selected_verses=selected,
-        evidence_items=[
-            make_evidence(
-                kind="verse",
-                content=v.text_uthmani,
-                refs=[v.ref],
-                id_prefix=f"verse-{v.ref.surah}-{v.ref.ayah}",
-                metadata={
-                    "source_tool": v.source_tool,
-                    "relevance": v.relevance,
-                    "raw": v.raw,
-                },
-            )
-            for v in selected
-        ],
+        evidence_items=verse_evidence + meta_evidence,
     )

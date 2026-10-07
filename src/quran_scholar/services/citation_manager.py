@@ -129,6 +129,13 @@ class CitationManager:
                 if verse_reference
                 else "[Quran]"
             )
+        elif kind == "quran_meta":
+            tool = (evidence.metadata or {}).get("source_tool") or "Quran Info"
+            label = (
+                f"[{tool} — {verse_reference}]"
+                if verse_reference
+                else f"[{tool}]"
+            )
         elif kind == "tafsir":
             name = source_label or source_id or "Tafsir"
             # Normalize common Arabic attribution to short English display when mapped

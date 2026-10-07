@@ -1,7 +1,7 @@
 [project]
 name = "quran-scholar"
 version = "0.1.0"
-description = "Quran Scholar: multi-agent Quranic research and tafsir system"
+description = "Quran Scholar: multi-agent research for any Quran-related question (MCP-backed)"
 requires-python = ">=3.12"
 dependencies = [
     "ipykernel>=6.29.5",

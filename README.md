@@ -1,10 +1,17 @@
 # Quran Scholar
 
-A Multi-Agent Quranic Research and Tafsir System.
+A multi-agent system for **any Quran-related question** — not only tafsir.
 
-Orchestrates LangGraph agents with [Tafsir MCP](https://tafsirmcp.netlify.app/) for verified Quranic text, classical tafsir, linguistic analysis, and asbab al-nuzool — so answers stay cited instead of hallucinated.
+The Planner builds a minimal investigation plan; specialized researchers use
+[Tafsir MCP](https://tafsirmcp.netlify.app/) tools (as needed) for Quran text,
+search, surah/overview/stats/qira'at, classical tafsir, linguistics, and asbab
+al-nuzool. Answers stay cited instead of hallucinated.
 
-**Input:** Users ask research questions in **Modern Standard Arabic** (e.g. `ما تفسير آية الكرسي؟`, `سورة ٢ آية ٢٥٥`, or `2:255`). The final report is Arabic; `language` defaults to `ar` in `initial_research_state`.
+**Examples:** thematic verses · verse lookup · tafsir / mufassir comparison ·
+word roots · reasons of revelation · surah info / statistics / qira'at.
+
+**Input:** questions in **Modern Standard Arabic**. Final report is Arabic;
+`language` defaults to `ar`.
 
 ## Stack
 
@@ -13,7 +20,7 @@ Orchestrates LangGraph agents with [Tafsir MCP](https://tafsirmcp.netlify.app/) 
 | **LangGraph** | Workflow orchestration (non-sequential: planner, parallel research, verify/retry) |
 | **Tool agents (`*_agent`)** | Researchers only: `create_agent` + MCP tools |
 | **Other LLM modules** | Planner, manager, gap, comparator, claims, verifier, report — LLM/heuristics, **no** tools |
-| **Tafsir MCP** | Tools bound per role (`fetch_ayah`, `search_quran_text`, `fetch_tafsir`, `search_in_tafsir`, …) |
+| **Tafsir MCP** | Role toolsets (Quran meta + text, tafsir, linguistic, nuzool) — planner only schedules what the question needs |
 | **Pydantic** | Structured plans, evidence, claims, verification |
 | **Deterministic Python** | Validation, routing, iteration counters, state updates |
 
@@ -127,15 +134,15 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 | --- | --- |
 | **Planner** | Turn the Arabic question into a **research plan only** (focus, tasks, needed evidence types). Does not answer the question or quote tafsir. |
 | **Research Manager** | Supervisor: pick the next action(s) from the plan (and gaps). Can fan out **parallel** researchers when tasks are independent. |
-| **Quran Researcher** | Find relevant ayahs (`create_agent` + `fetch_ayah` / `search_quran_text`). Writes `discovered_verses` and relevance-filtered `selected_verses`. |
-| **Tafsir Researcher** | Retrieve classical commentary for selected verses (`fetch_tafsir` and/or `search_in_tafsir`). Stores raw attributed excerpts — no LLM rewrite of tafsir. |
-| **Linguistic Researcher** | Optional word/root study (`analyze_word`, `get_root_stats`, `find_root_occurrences`) when the plan needs it. |
-| **Context Researcher** | Fetch asbab al-nuzool (`fetch_nuzool_reason`) with status FOUND / NOT_AVAILABLE / ERROR. |
+| **Quran Researcher** | Text + meta MCP tools (`fetch_ayah`, `search_quran_text`, surah info, overview, stats, qira'at, …). |
+| **Tafsir Researcher** | Classical commentary **when planned** (`fetch_tafsir`, `search_in_tafsir`, list sources). |
+| **Linguistic Researcher** | Word/root study **when planned**. |
+| **Context Researcher** | Asbab al-nuzool / source lists **when planned**. |
 | **Gap Analyzer** | Check whether collected evidence is enough for the plan; mark gaps and send the run back to the manager or onward. |
 | **Tafsir Comparator** | Compare tafsir sources on the same verse(s): agreements, differences, open questions. |
 | **Claim Extractor** | Turn verified materials into auditable **claims**, each tied to `evidence_ids` (no free-floating assertions). |
 | **Evidence Verifier** | Check claims against evidence; pass → report, fail → loop via gap analyzer (until max iterations). |
-| **Report Generator** | Write the final **Arabic** report from verified claims/evidence/citations only — no invented Quranic facts. |
+| **Report Generator** | Final **Arabic Q&A**: direct **الإجابة** + **الأدلة** (citations/excerpts) from collected evidence only. |
 
 ### Routing (short)
 

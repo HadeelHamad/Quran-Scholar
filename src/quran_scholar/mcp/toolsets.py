@@ -1,4 +1,4 @@
-"""Focused MCP toolsets per researcher — do not expose every tool to every agent."""
+"""Focused MCP toolsets per researcher — LLM chooses among allowed tools."""
 
 from __future__ import annotations
 
@@ -9,15 +9,19 @@ ResearcherRole = Literal[
     "tafsir",
     "linguistic",
     "context",
-    "specialized",
 ]
 
-# Per-role allow-lists for create_agent — the LLM chooses among these tools
+# Broad Quran research: each role gets the MCP tools relevant to its specialty
 TOOLSETS: dict[ResearcherRole, frozenset[str]] = {
     "quran": frozenset(
         {
             "search_quran_text",
             "fetch_ayah",
+            "fetch_surah_info",
+            "get_quran_overview",
+            "get_surah_statistics",
+            "get_qeraat_variants",
+            "get_page_fawaed",
         }
     ),
     "linguistic": frozenset(
@@ -31,17 +35,15 @@ TOOLSETS: dict[ResearcherRole, frozenset[str]] = {
         {
             "fetch_tafsir",
             "search_in_tafsir",
+            "list_tafsir_sources",
+            "list_sources_for_ayah",
         }
     ),
     "context": frozenset(
         {
             "fetch_nuzool_reason",
-        }
-    ),
-    "specialized": frozenset(
-        {
-            "get_qeraat_variants",
-            "fetch_surah_info",
+            "list_science_sources",
+            "list_all_sources",
         }
     ),
 }
