@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from quran_scholar.mcp.client import ScopedTafsirMCPClient, TafsirMCPError
+from quran_scholar.mcp.client import ScopedTafsirMCPClient
+from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import mcp_payload
+from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import Evidence, NuzoolEvidence, ResearchPlan, VerseEvidence
 from quran_scholar.state import ResearchState
 
@@ -106,9 +108,8 @@ def run_context_research(state: ResearchState) -> dict:
 
     Each verse gets an explicit status:
     - FOUND — text retrieved
-    - NOT_AVAILABLE — MCP reports no asbab for this ayah
-    - ERROR — tool/transport failure for this ayah
-    Never collapse these into a single None.
+    - NOT_AVAILABLE — MCP request succeeded; no asbab for this ayah
+    - ERROR — MCP request failed (never treat as NOT_AVAILABLE)
     """
     task_id = state.get("current_task_id") or ""
     verses = _verses(state)
@@ -124,87 +125,105 @@ def run_context_research(state: ResearchState) -> dict:
     nuzool_items: list[NuzoolEvidence] = []
 
     try:
-        with ScopedTafsirMCPClient("context") as client:
-            for verse in verses:
-                surah, ayah = verse.ref.surah, verse.ref.ayah
-                try:
-                    raw = client.call_tool(
-                        "fetch_nuzool_reason",
-                        {"surah": surah, "ayah": ayah},
-                    )
-                    payload = mcp_payload(raw)
-                    if not isinstance(payload, dict):
-                        nuzool_items.append(
-                            NuzoolEvidence(
-                                status="ERROR",
-                                content="Unexpected MCP payload shape",
-                                source=None,
-                                surah_number=surah,
-                                ayah_number=ayah,
-                                raw={"payload": payload},
-                            )
-                        )
-                        continue
-
-                    sources = payload.get("sources")
-                    if isinstance(sources, list) and sources:
-                        for entry in sources:
-                            if isinstance(entry, dict):
-                                nuzool_items.append(
-                                    _classify_nuzool_source(surah, ayah, entry)
-                                )
-                    else:
-                        nuzool_items.append(
-                            NuzoolEvidence(
-                                status="NOT_AVAILABLE",
-                                content="No nuzool sources returned for this ayah",
-                                source=None,
-                                surah_number=surah,
-                                ayah_number=ayah,
-                                raw=payload if isinstance(payload, dict) else {},
-                            )
-                        )
-                except TafsirMCPError as exc:
-                    nuzool_items.append(
-                        NuzoolEvidence(
-                            status="ERROR",
-                            content=str(exc),
-                            source=None,
-                            surah_number=surah,
-                            ayah_number=ayah,
-                            raw={"error": str(exc)},
-                        )
-                    )
-                except Exception as exc:
-                    nuzool_items.append(
-                        NuzoolEvidence(
-                            status="ERROR",
-                            content=str(exc),
-                            source=None,
-                            surah_number=surah,
-                            ayah_number=ayah,
-                            raw={"error": str(exc)},
-                        )
-                    )
-    except Exception as exc:
-        # Session-level failure → ERROR for every requested verse
+        client_cm = ScopedTafsirMCPClient("context")
+        client_cm.__enter__()
+    except (MCPError, Exception) as exc:
+        msg = f"Nuzool retrieval failed (MCP session — not 'no nuzool'): {exc}"
         for v in verses:
             nuzool_items.append(
                 NuzoolEvidence(
                     status="ERROR",
-                    content=str(exc),
+                    content=msg,
                     source=None,
                     surah_number=v.ref.surah,
                     ayah_number=v.ref.ayah,
                     raw={"error": str(exc)},
                 )
             )
-        errors.append(f"context_researcher: MCP init failed: {exc}")
         return {
             "nuzool_evidence": nuzool_items,
-            "errors": errors,
+            "warnings": [msg],
+            "errors": [msg],
             "completed_task_ids": [task_id] if task_id else [],
         }
+
+    try:
+        for verse in verses:
+            surah, ayah = verse.ref.surah, verse.ref.ayah
+            outcome = safe_call_tool(
+                client_cm,
+                "fetch_nuzool_reason",
+                {"surah": surah, "ayah": ayah},
+                label=f"fetch_nuzool_reason {surah}:{ayah}",
+            )
+            warnings.extend(outcome.warnings)
+
+            if outcome.failed:
+                # MCP failure ≠ no asbab exists
+                nuzool_items.append(
+                    NuzoolEvidence(
+                        status="ERROR",
+                        content=outcome.error or "MCP request failed",
+                        source=None,
+                        surah_number=surah,
+                        ayah_number=ayah,
+                        raw={"error": outcome.error, "mcp_failed": True},
+                    )
+                )
+                continue
+
+            payload = mcp_payload(outcome.data)
+            if not isinstance(payload, dict):
+                warnings.extend(
+                    mark_empty(
+                        outcome,
+                        message=(
+                            f"NO_EVIDENCE: MCP succeeded but unexpected payload "
+                            f"for nuzool {surah}:{ayah}"
+                        ),
+                    ).warnings
+                )
+                nuzool_items.append(
+                    NuzoolEvidence(
+                        status="NOT_AVAILABLE",
+                        content="Unexpected MCP payload shape (request succeeded)",
+                        source=None,
+                        surah_number=surah,
+                        ayah_number=ayah,
+                        raw={"payload": payload},
+                    )
+                )
+                continue
+
+            sources = payload.get("sources")
+            if isinstance(sources, list) and sources:
+                for entry in sources:
+                    if isinstance(entry, dict):
+                        nuzool_items.append(
+                            _classify_nuzool_source(surah, ayah, entry)
+                        )
+            else:
+                warnings.extend(
+                    mark_empty(
+                        outcome,
+                        message=(
+                            f"NO_EVIDENCE: MCP succeeded but no nuzool sources "
+                            f"for {surah}:{ayah}"
+                        ),
+                    ).warnings
+                )
+                nuzool_items.append(
+                    NuzoolEvidence(
+                        status="NOT_AVAILABLE",
+                        content="No nuzool sources returned for this ayah",
+                        source=None,
+                        surah_number=surah,
+                        ayah_number=ayah,
+                        raw=payload,
+                    )
+                )
+    finally:
+        client_cm.__exit__(None, None, None)
 
     evidence = [
         e for e in (_nuzool_to_evidence(n) for n in nuzool_items) if e is not None

@@ -8,7 +8,9 @@ from typing import Any
 
 from quran_scholar.config import configured_tafsir_sources
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
+from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
+from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import (
     Evidence,
     ResearchPlan,
@@ -85,12 +87,18 @@ def _tafsir_to_evidence(t: TafsirEvidence) -> Evidence:
     return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
+def _records_from_payload(raw: Any) -> list[dict[str, Any]]:
+    payload = mcp_payload(raw)
+    if isinstance(payload, dict) and isinstance(payload.get("tafsirs"), list):
+        return [x for x in payload["tafsirs"] if isinstance(x, dict)]
+    return as_list(raw)
+
+
 def run_tafsir_research(state: ResearchState) -> dict:
     """
     Retrieve tafsir for selected verses.
 
-    Stores raw MCP tafsir in tafsir_evidence + evidence_items.
-    Does NOT write LLM findings here — analysis nodes own findings.
+    MCP failures become warnings — never interpreted as "no tafsir exists."
     """
     plan: ResearchPlan | None = state.get("research_plan")
     task_id = state.get("current_task_id") or ""
@@ -98,6 +106,8 @@ def run_tafsir_research(state: ResearchState) -> dict:
     sources = _prioritize_sources(plan)
     warnings: list[str] = []
     errors: list[str] = []
+    mcp_failures = 0
+    empty_results = 0
 
     if not verses:
         return {
@@ -108,67 +118,96 @@ def run_tafsir_research(state: ResearchState) -> dict:
     tafsir_items: list[TafsirEvidence] = []
 
     try:
-        with ScopedTafsirMCPClient("tafsir") as client:
-            for verse in verses:
-                ref = verse.ref
-                raw = client.call_tool(
-                    "fetch_tafsir",
-                    {
-                        "surah": ref.surah,
-                        "ayah": ref.ayah,
-                        "sources": sources,
-                    },
-                )
-                payload = mcp_payload(raw)
-                records: list[dict[str, Any]]
-                if isinstance(payload, dict) and isinstance(payload.get("tafsirs"), list):
-                    records = [x for x in payload["tafsirs"] if isinstance(x, dict)]
-                else:
-                    records = as_list(raw)
-
-                if not records:
-                    warnings.append(
-                        f"tafsir_researcher: no tafsir for {ref.surah}:{ref.ayah}"
-                    )
-                    continue
-
-                for rec in records:
-                    source_id = str(rec.get("source") or rec.get("source_id") or "unknown")
-                    text = str(rec.get("text") or "")
-                    if not text.strip():
-                        continue
-                    title, author, death = _parse_attribution(
-                        rec.get("attribution") if isinstance(rec.get("attribution"), str) else None
-                    )
-                    tafsir_items.append(
-                        TafsirEvidence(
-                            ref=VerseRef(surah=ref.surah, ayah=ref.ayah),
-                            source_id=source_id,
-                            source_title=title,
-                            author=author,
-                            death_year_hijri=death,
-                            text=text,
-                            source_tool="fetch_tafsir",
-                            raw=rec,  # raw retrieved block preserved
-                        )
-                    )
-    except Exception as exc:
-        errors.append(f"tafsir_researcher: MCP error: {exc}")
+        client_cm = ScopedTafsirMCPClient("tafsir")
+        client_cm.__enter__()
+    except MCPError as exc:
+        # Session failure — do NOT claim tafsir is absent
+        msg = f"Tafsir retrieval failed (MCP session — not 'no tafsir'): {exc}"
         return {
-            "errors": errors,
-            "warnings": warnings,
+            "warnings": [msg],
+            "errors": [msg],
+            "completed_task_ids": [task_id] if task_id else [],
+        }
+    except Exception as exc:
+        msg = f"Tafsir retrieval failed (session — not 'no tafsir'): {exc}"
+        return {
+            "warnings": [msg],
+            "errors": [msg],
             "completed_task_ids": [task_id] if task_id else [],
         }
 
+    try:
+        for verse in verses:
+            ref = verse.ref
+            label = f"fetch_tafsir {ref.surah}:{ref.ayah}"
+            outcome = safe_call_tool(
+                client_cm,
+                "fetch_tafsir",
+                {
+                    "surah": ref.surah,
+                    "ayah": ref.ayah,
+                    "sources": sources,
+                },
+                label=label,
+            )
+            warnings.extend(outcome.warnings)
+
+            if outcome.failed:
+                mcp_failures += 1
+                # Explicit: failure ≠ absence of tafsir
+                continue
+
+            records = _records_from_payload(outcome.data)
+            usable = [
+                rec
+                for rec in records
+                if str(rec.get("text") or "").strip()
+            ]
+            if not usable:
+                empty_results += 1
+                outcome = mark_empty(
+                    outcome,
+                    message=(
+                        f"NO_EVIDENCE: MCP succeeded but no tafsir text for "
+                        f"{ref.surah}:{ref.ayah} (sources={sources})"
+                    ),
+                )
+                warnings.extend(outcome.warnings)
+                continue
+
+            for rec in usable:
+                source_id = str(rec.get("source") or rec.get("source_id") or "unknown")
+                text = str(rec.get("text") or "")
+                title, author, death = _parse_attribution(
+                    rec.get("attribution")
+                    if isinstance(rec.get("attribution"), str)
+                    else None
+                )
+                tafsir_items.append(
+                    TafsirEvidence(
+                        ref=VerseRef(surah=ref.surah, ayah=ref.ayah),
+                        source_id=source_id,
+                        source_title=title,
+                        author=author,
+                        death_year_hijri=death,
+                        text=text,
+                        source_tool="fetch_tafsir",
+                        raw=rec,
+                    )
+                )
+    finally:
+        client_cm.__exit__(None, None, None)
+
     evidence = [_tafsir_to_evidence(t) for t in tafsir_items]
+    summary = (
+        f"tafsir_researcher: fetched={len(tafsir_items)} "
+        f"mcp_failures={mcp_failures} empty_results={empty_results} "
+        f"sources={sources}"
+    )
     updates: dict[str, Any] = {
         "tafsir_evidence": tafsir_items,
         "evidence_items": evidence,
-        "warnings": warnings
-        + [
-            f"tafsir_researcher: fetched {len(tafsir_items)} raw tafsir excerpt(s) "
-            f"from sources={sources} for {len(verses)} verse(s)"
-        ],
+        "warnings": warnings + [summary],
     }
     if task_id:
         updates["completed_task_ids"] = [task_id]

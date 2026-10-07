@@ -15,6 +15,12 @@ import httpx
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
 
+from quran_scholar.mcp.errors import (
+    MCPError,
+    MCPNetworkError,
+    MCPProtocolError,
+    MCPToolError,
+)
 from quran_scholar.mcp.toolsets import (
     ALL_PROJECT_TOOLS,
     ResearcherRole,
@@ -28,7 +34,7 @@ DEFAULT_TAFSIR_MCP_URL = "https://mcp.tafsir.net/mcp"
 PRIMARY_TOOLS = ALL_PROJECT_TOOLS
 
 
-class TafsirMCPError(RuntimeError):
+class TafsirMCPError(MCPError):
     """Raised when the Tafsir MCP HTTP session fails."""
 
 
@@ -110,12 +116,19 @@ class TafsirMCPClient:
             "method": method,
             "params": params or {},
         }
-        response = self._client.post(
-            self.url, headers=self._headers(), content=json.dumps(payload)
-        )
-        data = self._parse_response(response)
+        try:
+            response = self._client.post(
+                self.url, headers=self._headers(), content=json.dumps(payload)
+            )
+        except httpx.HTTPError as exc:
+            raise MCPNetworkError(f"MCP network error on {method}: {exc}") from exc
+        try:
+            data = self._parse_response(response)
+        except TafsirMCPError as exc:
+            # HTTP 4xx/5xx / bad SSE — treat as protocol/transport
+            raise MCPProtocolError(str(exc)) from exc
         if "error" in data and data["error"]:
-            raise TafsirMCPError(str(data["error"]))
+            raise MCPToolError(str(data["error"]))
         return data.get("result")
 
     def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
@@ -124,12 +137,15 @@ class TafsirMCPClient:
             "method": method,
             "params": params or {},
         }
-        response = self._client.post(
-            self.url, headers=self._headers(), content=json.dumps(payload)
-        )
+        try:
+            response = self._client.post(
+                self.url, headers=self._headers(), content=json.dumps(payload)
+            )
+        except httpx.HTTPError as exc:
+            raise MCPNetworkError(f"MCP network error on notify {method}: {exc}") from exc
         # notifications may be 202/empty
         if response.status_code >= 400:
-            raise TafsirMCPError(
+            raise MCPProtocolError(
                 f"MCP notify failed {response.status_code}: {response.text[:300]}"
             )
         sid = response.headers.get("mcp-session-id") or response.headers.get(
