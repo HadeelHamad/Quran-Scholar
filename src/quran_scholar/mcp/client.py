@@ -15,23 +15,17 @@ import httpx
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
 
+from quran_scholar.mcp.toolsets import (
+    ALL_PROJECT_TOOLS,
+    ResearcherRole,
+    assert_tool_allowed,
+    tools_for,
+)
+
 DEFAULT_TAFSIR_MCP_URL = "https://mcp.tafsir.net/mcp"
 
-# Core tools used by Quran Scholar research nodes
-PRIMARY_TOOLS = frozenset(
-    {
-        "fetch_ayah",
-        "fetch_tafsir",
-        "fetch_nuzool_reason",
-        "search_quran_text",
-        "search_in_tafsir",
-        "analyze_word",
-        "find_root_occurrences",
-        "get_root_stats",
-        "fetch_surah_info",
-        "get_qeraat_variants",
-    }
-)
+# Backward-compatible alias — prefer role toolsets in toolsets.py
+PRIMARY_TOOLS = ALL_PROJECT_TOOLS
 
 
 class TafsirMCPError(RuntimeError):
@@ -167,6 +161,57 @@ class TafsirMCPClient:
         )
         return result
 
+    def call_tool_for_role(
+        self,
+        role: ResearcherRole,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+    ) -> Any:
+        """Call an MCP tool only if it belongs to the researcher's toolset."""
+        assert_tool_allowed(role, name)
+        return self.call_tool(name, arguments)
+
+
+class ScopedTafsirMCPClient:
+    """
+    MCP client scoped to one researcher role.
+
+    Only tools in that role's toolset may be called — reduces selection errors.
+    """
+
+    def __init__(
+        self,
+        role: ResearcherRole,
+        *,
+        url: str | None = None,
+        client: TafsirMCPClient | None = None,
+    ) -> None:
+        self.role = role
+        self._owns_client = client is None
+        self._client = client or TafsirMCPClient(url=url)
+
+    @property
+    def allowed_tools(self) -> frozenset[str]:
+        return tools_for(self.role)
+
+    def __enter__(self) -> ScopedTafsirMCPClient:
+        if self._owns_client:
+            self._client.initialize()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        if self._owns_client:
+            self._client.close()
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Return only tools allowed for this researcher role."""
+        catalog = self._client.list_tools()
+        allowed = self.allowed_tools
+        return [t for t in catalog if t.get("name") in allowed]
+
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
+        return self._client.call_tool_for_role(self.role, name, arguments)
+
 
 def _schema_to_args_model(tool_name: str, schema: dict[str, Any] | None) -> type[BaseModel]:
     """Build a loose Pydantic args model from an MCP JSON schema."""
@@ -221,11 +266,13 @@ def _normalize_tool_result(result: Any) -> str:
 def get_tafsir_mcp_tools(
     *,
     url: str | None = None,
+    role: ResearcherRole | None = None,
     primary_only: bool = True,
 ) -> tuple[TafsirMCPClient, list[StructuredTool]]:
     """
     Open a Tafsir MCP session and wrap tools as LangChain StructuredTools.
 
+    Prefer ``role=`` so each agent only sees its focused toolset.
     Caller owns the client lifecycle (call ``client.close()`` when done).
     """
     mode = os.getenv("TAFSIR_MCP_MODE", "http").strip().lower()
@@ -239,30 +286,34 @@ def get_tafsir_mcp_tools(
     client = TafsirMCPClient(url=url)
     client.initialize()
     catalog = client.list_tools()
+    allowed = tools_for(role) if role else (PRIMARY_TOOLS if primary_only else None)
 
     tools: list[StructuredTool] = []
     for meta in catalog:
         name = meta.get("name")
         if not name:
             continue
-        if primary_only and name not in PRIMARY_TOOLS:
+        if allowed is not None and name not in allowed:
             continue
         description = meta.get("description") or f"Tafsir MCP tool: {name}"
         args_model = _schema_to_args_model(name, meta.get("inputSchema"))
 
-        def _make_coroutine(tool_name: str):
+        def _make_coroutine(tool_name: str, tool_role: ResearcherRole | None):
             def _call(**kwargs: Any) -> str:
                 cleaned = {k: v for k, v in kwargs.items() if v is not None}
                 if "payload" in cleaned and len(cleaned) == 1:
                     cleaned = cleaned["payload"] or {}
-                result = client.call_tool(tool_name, cleaned)
+                if tool_role is not None:
+                    result = client.call_tool_for_role(tool_role, tool_name, cleaned)
+                else:
+                    result = client.call_tool(tool_name, cleaned)
                 return _normalize_tool_result(result)
 
             return _call
 
         tools.append(
             StructuredTool.from_function(
-                func=_make_coroutine(name),
+                func=_make_coroutine(name, role),
                 name=name,
                 description=description,
                 args_schema=args_model,
@@ -272,6 +323,6 @@ def get_tafsir_mcp_tools(
     return client, tools
 
 
-def tafsir_mcp_adapter():
-    """Backward-compatible name: prefer get_tafsir_mcp_tools()."""
-    return get_tafsir_mcp_tools()
+def tafsir_mcp_adapter(*, role: ResearcherRole | None = None):
+    """Backward-compatible name: prefer get_tafsir_mcp_tools(role=...)."""
+    return get_tafsir_mcp_tools(role=role)

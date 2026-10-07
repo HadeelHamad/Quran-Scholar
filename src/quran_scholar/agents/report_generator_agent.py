@@ -16,6 +16,7 @@ from quran_scholar.models import (
     TafsirComparison,
     VerificationResult,
 )
+from quran_scholar.services.citation_manager import citation_manager
 from quran_scholar.state import ResearchState
 
 REPORT_SYSTEM = """You are the Report Generator for Quran Scholar.
@@ -24,10 +25,11 @@ Write the entire report in Modern Standard Arabic (الفصحى).
 Do not write the report body in English.
 
 Hard constraints:
-1) Use ONLY the supplied materials (verified claims, verified evidence, tafsir comparisons, research warnings).
+1) Use ONLY the supplied materials (verified claims, verified evidence, citations, tafsir comparisons, research warnings).
 2) Do NOT introduce new Quranic facts that are absent from the supplied evidence.
-3) Do NOT invent citations, verse numbers, or sources not explicitly present in the evidence.
-4) Do NOT attribute an interpretation to a mufassir/source unless the supplied evidence text explicitly identifies that source.
+3) Do NOT invent citation syntax. Use ONLY the provided citation.label strings
+   (e.g. [Quran 2:153], [Tafsir Ibn Kathir — 2:153]). Never invent brackets or source names.
+4) Do NOT attribute an interpretation to a mufassir/source unless the supplied evidence/citation explicitly identifies that source.
 5) Do NOT treat unsupported or conflicting claims as usable evidence (they are excluded from your inputs on purpose).
 6) If the verified evidence is insufficient to answer the question, state that explicitly in Arabic and do not fill gaps from your own knowledge.
 
@@ -110,9 +112,15 @@ def _pack_inputs(state: ResearchState) -> dict[str, Any]:
     claims = _verified_claims(state)
     evidence = _verified_evidence(state, claims)
     evidence_ids = {e.id for e in evidence}
+    evidence_by_id = {e.id: e for e in evidence}
     comparisons = _safe_comparisons(state, evidence_ids)
     warnings = list(state.get("warnings") or [])
     result = state.get("verification_result")
+
+    # Fresh formatting pass for this report (avoid cross-run cache collisions)
+    citation_manager.clear_cache()
+    citations = citation_manager.format_many(evidence)
+    citations_by_id = {c.evidence_id: c for c in citations}
 
     return {
         "user_question": state.get("user_question") or "",
@@ -123,6 +131,9 @@ def _pack_inputs(state: ResearchState) -> dict[str, Any]:
                 "statement": c.statement,
                 "claim_type": str(c.claim_type),
                 "evidence_ids": c.evidence_ids,
+                "citation_labels": citation_manager.labels_for_ids(
+                    c.evidence_ids, evidence_by_id
+                ),
                 "verification_status": _status_value(c.verification_status),
             }
             for c in claims
@@ -131,11 +142,15 @@ def _pack_inputs(state: ResearchState) -> dict[str, Any]:
             {
                 "id": e.id,
                 "kind": e.kind,
-                "citation": e.citation,
                 "content": e.content,
+                # Canonical citation object — report must use citation.label as-is
+                "citation": citations_by_id[e.id].model_dump()
+                if e.id in citations_by_id
+                else citation_manager.format(e).model_dump(),
             }
             for e in evidence
         ],
+        "citations": [c.model_dump() for c in citations],
         "tafsir_comparisons": [
             {
                 "verse_reference": c.verse_reference,
@@ -143,6 +158,9 @@ def _pack_inputs(state: ResearchState) -> dict[str, Any]:
                 "differences": c.differences,
                 "difference_types": c.difference_types,
                 "evidence_ids": c.evidence_ids,
+                "citation_labels": citation_manager.labels_for_ids(
+                    c.evidence_ids, evidence_by_id
+                ),
                 "summary": c.summary,
             }
             for c in comparisons
@@ -193,12 +211,15 @@ def _deterministic_arabic_report(payload: dict[str, Any]) -> str:
                 "لم تجتزِ عملية التحقق بالكامل؛ يُعرض فقط ما ثبُت من دعاوى وأدلة."
             )
         for c in claims:
-            lines.append(f"- {c['statement']} (أدلة: {', '.join(c['evidence_ids'])})")
+            labels = c.get("citation_labels") or c.get("evidence_ids") or []
+            lines.append(f"- {c['statement']} {' '.join(labels)}")
         lines.append("")
 
         lines.append("## الأدلة المعتمدة")
         for e in evidence:
-            lines.append(f"### {e['citation']} (`{e['id']}`)")
+            cite = e.get("citation") or {}
+            label = cite.get("label") if isinstance(cite, dict) else str(cite)
+            lines.append(f"### {label}")
             lines.append(e["content"][:1200])
             lines.append("")
 
@@ -206,6 +227,9 @@ def _deterministic_arabic_report(payload: dict[str, Any]) -> str:
             lines.append("## مقارنة التفاسير (من المواد المورَدة فقط)")
             for cmp in comparisons:
                 lines.append(f"### {cmp['verse_reference']}")
+                labels = cmp.get("citation_labels") or []
+                if labels:
+                    lines.append("المصادر: " + " ".join(labels))
                 for a in cmp.get("agreements") or []:
                     lines.append(f"- اتفاق: {a}")
                 for d in cmp.get("differences") or []:

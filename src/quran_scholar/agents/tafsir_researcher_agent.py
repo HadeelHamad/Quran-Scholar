@@ -7,7 +7,7 @@ import uuid
 from typing import Any
 
 from quran_scholar.config import configured_tafsir_sources
-from quran_scholar.mcp.client import TafsirMCPClient
+from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.models import (
     Evidence,
@@ -64,24 +64,25 @@ def _prioritize_sources(plan: ResearchPlan | None) -> list[str]:
 
 
 def _tafsir_to_evidence(t: TafsirEvidence) -> Evidence:
-    citation = t.source_title or t.source_id
-    if t.author:
-        citation = f"{citation} — {t.author}"
-    if t.death_year_hijri:
-        citation = f"{citation} (ت. {t.death_year_hijri})"
-    return Evidence(
+    from quran_scholar.services.citation_manager import citation_manager
+
+    ev = Evidence(
         id=f"tafsir-{t.source_id}-{t.ref.surah}-{t.ref.ayah}-{uuid.uuid4().hex[:8]}",
         kind="tafsir",
         content=t.text,  # raw retrieved text — never an LLM summary
-        citation=f"{citation} on {t.ref.surah}:{t.ref.ayah}",
+        citation="",  # filled by citation_manager
         refs=[t.ref],
         metadata={
             "source_id": t.source_id,
+            "source_title": t.source_title,
+            "author": t.author,
+            "death_year_hijri": t.death_year_hijri,
             "source_tool": t.source_tool,
             "raw": t.raw,
             "raw_tafsir": True,
         },
     )
+    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
 def run_tafsir_research(state: ResearchState) -> dict:
@@ -107,7 +108,7 @@ def run_tafsir_research(state: ResearchState) -> dict:
     tafsir_items: list[TafsirEvidence] = []
 
     try:
-        with TafsirMCPClient() as client:
+        with ScopedTafsirMCPClient("tafsir") as client:
             for verse in verses:
                 ref = verse.ref
                 raw = client.call_tool(

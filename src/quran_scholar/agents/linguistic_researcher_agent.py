@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from quran_scholar.agents.llm import get_llm
-from quran_scholar.mcp.client import TafsirMCPClient
+from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.models import (
     Evidence,
@@ -137,12 +137,13 @@ def _extract_root(analysis: dict[str, Any]) -> str | None:
 
 
 def _ling_to_evidence(item: LinguisticEvidence) -> Evidence:
-    return Evidence(
+    from quran_scholar.services.citation_manager import citation_manager
+
+    ev = Evidence(
         id=f"ling-{uuid.uuid4().hex[:10]}",
         kind="linguistic",
         content=item.analysis,
-        citation=f"linguistic:{item.query}"
-        + (f" root={item.root}" if item.root else ""),
+        citation="",
         refs=item.related_verses,
         metadata={
             "source_tool": item.source_tool,
@@ -150,6 +151,7 @@ def _ling_to_evidence(item: LinguisticEvidence) -> Evidence:
             "raw": item.raw,
         },
     )
+    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
 def run_linguistic_research(state: ResearchState) -> dict:
@@ -182,7 +184,7 @@ def run_linguistic_research(state: ResearchState) -> dict:
     roots_seen: set[str] = set()
 
     try:
-        with TafsirMCPClient() as client:
+        with ScopedTafsirMCPClient("linguistic") as client:
             for verse in verses[:5]:
                 picks = _pick_terms(question, verse)
                 for word_no in picks.word_numbers:

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.config import quran_search_limit
-from quran_scholar.mcp.client import TafsirMCPClient
+from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.models import Evidence, ResearchPlan, VerseEvidence, VerseRef
 from quran_scholar.state import ResearchState
@@ -217,11 +217,13 @@ def _evaluate_selection(
 
 
 def _verse_to_evidence(v: VerseEvidence) -> Evidence:
-    return Evidence(
+    from quran_scholar.services.citation_manager import citation_manager
+
+    ev = Evidence(
         id=f"verse-{v.ref.surah}-{v.ref.ayah}-{uuid.uuid4().hex[:8]}",
         kind="verse",
         content=v.text_uthmani,
-        citation=f"Quran {v.ref.surah}:{v.ref.ayah}",
+        citation="",  # filled by citation_manager
         refs=[v.ref],
         metadata={
             "source_tool": v.source_tool,
@@ -229,6 +231,7 @@ def _verse_to_evidence(v: VerseEvidence) -> Evidence:
             "raw": v.raw,
         },
     )
+    return ev.model_copy(update={"citation": citation_manager.format(ev).label})
 
 
 def run_quran_research(state: ResearchState) -> dict:
@@ -250,7 +253,7 @@ def run_quran_research(state: ResearchState) -> dict:
     selected: list[VerseEvidence] = []
 
     try:
-        with TafsirMCPClient() as client:
+        with ScopedTafsirMCPClient("quran") as client:
             # Verse-specific: fetch primary ayah first
             primary = plan.primary_verse if plan else None
             if primary is None:
