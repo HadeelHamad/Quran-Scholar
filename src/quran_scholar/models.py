@@ -15,20 +15,6 @@ class TaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class QuestionFocus(str, Enum):
-    VERSE_SPECIFIC = "verse_specific"
-    THEMATIC = "thematic"
-    MIXED = "mixed"
-
-
-class ExecutionPattern(str, Enum):
-    """Research Manager execution strategies."""
-
-    THEMATIC = "thematic"
-    VERSE_SPECIFIC = "verse_specific"
-    TAFSIR_COMPARISON = "tafsir_comparison"
-
-
 class VerseRef(BaseModel):
     surah: int = Field(ge=1, le=114)
     ayah: int = Field(ge=1)
@@ -58,9 +44,6 @@ class ResearchPlan(BaseModel):
         description=(
             "What the user is asking in Arabic (one or two sentences; no tafsir content)"
         )
-    )
-    question_focus: QuestionFocus = Field(
-        description="verse_specific if a surah:ayah is central; thematic if topic-based"
     )
     required_evidence_types: list[str] = Field(
         default_factory=list,
@@ -99,7 +82,7 @@ class ResearchPlan(BaseModel):
     )
     primary_verse: VerseRef | None = Field(
         default=None,
-        description="Primary surah:ayah when question_focus is verse_specific",
+        description="Primary surah:ayah when the question targets a specific verse",
     )
 
 
@@ -221,5 +204,4 @@ class ResearchDecision(BaseModel):
     )
     task_id: str | None = Field(default=None)
     dispatches: list[ResearchDispatch] = Field(default_factory=list)
-    execution_pattern: ExecutionPattern | None = None
     reasoning: str = Field(description="Brief rationale for this routing decision")

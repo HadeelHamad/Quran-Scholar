@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from quran_scholar.models import (
-    ExecutionPattern,
-    QuestionFocus,
     RESEARCHER_ACTIONS,
     ResearchDecision,
     ResearchDispatch,
@@ -30,45 +28,22 @@ KIND_TO_ACTION = {
     "context": "context_research",
 }
 
-PATTERN_ORDER = {
-    ExecutionPattern.THEMATIC: [
-        "quran_research",
-        "linguistic_research",
-        "tafsir_research",
-        "context_research",
-    ],
-    ExecutionPattern.VERSE_SPECIFIC: [
-        "quran_research",
-        "tafsir_research",
-        "linguistic_research",
-        "context_research",
-    ],
-    ExecutionPattern.TAFSIR_COMPARISON: ["quran_research", "tafsir_research"],
-}
+# Preference order when several researchers are ready in one wave.
+RESEARCHER_ORDER = (
+    "quran_research",
+    "linguistic_research",
+    "tafsir_research",
+    "context_research",
+)
 
 _NEEDS_VERSES = frozenset(
     {"tafsir_research", "linguistic_research", "context_research"}
 )
 
 
-def choose_execution_pattern(plan: ResearchPlan | None) -> ExecutionPattern:
-    if plan is None:
-        return ExecutionPattern.THEMATIC
-    if plan.question_focus in (QuestionFocus.THEMATIC, QuestionFocus.MIXED):
-        return ExecutionPattern.THEMATIC
-    if (
-        plan.needs_tafsir_comparison
-        and not plan.needs_linguistic_analysis
-        and not plan.needs_sabab_nuzool
-    ):
-        return ExecutionPattern.TAFSIR_COMPARISON
-    return ExecutionPattern.VERSE_SPECIFIC
-
-
 def decide_next_action(state: ResearchState) -> ResearchDecision:
     """Pick next researcher wave(s), gap check, optional comparison, or finish."""
     plan = state.get("research_plan")
-    pattern = choose_execution_pattern(plan)
     done = set(state.get("completed_task_ids") or [])
 
     def decision(
@@ -82,7 +57,6 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
             action=action,  # type: ignore[arg-type]
             task_id=task_id,
             dispatches=dispatches or [],
-            execution_pattern=pattern,
             reasoning=reasoning,
         )
 
@@ -101,22 +75,20 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
                 continue
             by_action[action] = task
 
-    order = PATTERN_ORDER.get(pattern, PATTERN_ORDER[ExecutionPattern.THEMATIC])
-    ordered = [(a, by_action[a]) for a in order if a in by_action]
+    ordered = [(a, by_action[a]) for a in RESEARCHER_ORDER if a in by_action]
     seen = {a for a, _ in ordered}
     ordered += [(a, t) for a, t in by_action.items() if a not in seen]
 
     if ordered:
-        parallel = pattern == ExecutionPattern.THEMATIC and len(ordered) > 1
-        picks = ordered if parallel else [ordered[0]]
+        # All dependency-ready researchers in this wave run in parallel.
         dispatches = [
             ResearchDispatch(action=a, task_id=t.id)  # type: ignore[arg-type]
-            for a, t in picks
+            for a, t in ordered
         ]
-        mode = "parallel" if parallel else "sequential"
+        mode = "parallel" if len(dispatches) > 1 else "single"
         return decision(
             dispatches[0].action,
-            f"Pattern {pattern.value}: {mode} {[d.action for d in dispatches]}",
+            f"{mode} wave {[d.action for d in dispatches]}",
             task_id=dispatches[0].task_id,
             dispatches=dispatches,
         )
@@ -149,18 +121,12 @@ def research_manager_node(state: ResearchState) -> dict:
         return {
             "current_task_id": "",
             "research_decision": None,
-            "execution_pattern": None,
             "warnings": ["research_manager: missing research_plan"],
             "errors": ["research_manager: cannot decide without research_plan"],
         }
 
-    pattern = choose_execution_pattern(plan)
     decision = decide_next_action(state)
-    if decision.execution_pattern is None:
-        decision = decision.model_copy(update={"execution_pattern": pattern})
-
     return {
         "research_decision": decision,
-        "execution_pattern": decision.execution_pattern or pattern,
         "current_task_id": decision.task_id or "",
     }

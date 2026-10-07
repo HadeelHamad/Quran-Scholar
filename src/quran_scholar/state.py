@@ -15,7 +15,6 @@ from langgraph.graph.message import add_messages
 
 from quran_scholar.models import (
     Evidence,
-    ExecutionPattern,
     LinguisticEvidence,
     NuzoolEvidence,
     ResearchDecision,
@@ -35,7 +34,6 @@ class ResearchState(TypedDict, total=False):
 
     research_plan: ResearchPlan
     research_decision: ResearchDecision | None
-    execution_pattern: ExecutionPattern | None
     current_task_id: str
     completed_task_ids: Annotated[list[str], operator.add]
     unresolved_gaps: list[str]
@@ -73,7 +71,6 @@ def initial_research_state(
         user_question=user_question,
         language=language,
         research_decision=None,
-        execution_pattern=None,
         research_gap=None,
         completed_task_ids=[],
         unresolved_gaps=[],

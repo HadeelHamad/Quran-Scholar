@@ -349,7 +349,6 @@ def run_quran_research(state: ResearchState) -> dict:
             f"{primary.surah}:{primary.ayah}" if primary else None
         ),
         "search_limit": limit,
-        "plan_focus": plan.question_focus.value if plan else None,
     }
     user_msg = (
         f"Research brief:\n{json.dumps(brief, ensure_ascii=False)}\n\n"

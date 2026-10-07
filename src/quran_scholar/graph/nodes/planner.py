@@ -72,9 +72,8 @@ quote the Quran, summarize tafsir, or give religious rulings.
 
 Identify:
 - what the user is asking
-- verse-specific vs thematic vs meta (stats/overview)
 - which evidence types are ACTUALLY needed (do not add tafsir by default)
-- the MINIMAL researcher tasks
+- the MINIMAL researcher tasks and their depends_on
 
 Evidence types you may list: quran_text, tafsir, linguistic, nuzool,
 tafsir_comparison, surah_info, statistics
@@ -90,17 +89,17 @@ Do NOT add tasks named verification or tafsir_comparison; the graph handles thos
 Set needs_tafsir_comparison=true ONLY when the user wants multi-mufassir comparison
 or clearly needs contrasting commentaries.
 
-Execution strategies:
-- thematic: quran_search first; then ONLY the parallel follow-ups that are needed
-  (tafsir / linguistic / nuzool) with depends_on=[quran task id]
-- verse_specific: fetch_ayah first; add tafsir/linguistic/nuzool only if needed
-- tafsir_comparison: fetch_ayah → tafsir_fetch when comparison is the goal
+Task dependencies:
+- Known verse: fetch_ayah first; add tafsir/linguistic/nuzool only if needed
+  (depends_on=[fetch task id])
+- Theme/search: quran_search first; follow-ups that need verses depend on it
+- Ready follow-ups with the same depends_on can run in parallel
 
 Keep plans lean:
 - "كم عدد آيات سورة البقرة؟" / overview → mostly quran_search (meta tools)
 - "ما تفسير …؟" → include tafsir_fetch
 - "ما جذر كلمة …؟" → linguistic, maybe fetch_ayah
-- thematic theme without asking for tafsir → quran_search (+ linguistic if wording/roots matter)
+- theme without asking for tafsir → quran_search (+ linguistic if wording/roots matter)
 
 Write question_summary, approach, and task descriptions in Arabic when language is ar.
 """
