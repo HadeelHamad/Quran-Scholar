@@ -45,6 +45,17 @@ def task_id_for_action(state: ResearchState, action: str) -> str:
     return state.get("current_task_id") or ""
 
 
+def _wants_tafsir_comparison(state: ResearchState) -> bool:
+    """Comparator is optional — only when the plan/user question needs it."""
+    plan = state.get("research_plan")
+    if plan is None:
+        return False
+    if plan.needs_tafsir_comparison:
+        return True
+    types = plan.required_evidence_types or []
+    return "tafsir_comparison" in types
+
+
 def route_after_gap_analyzer(state: ResearchState) -> str:
     plan = state.get("research_plan")
     done = set(state.get("completed_task_ids") or [])
@@ -54,12 +65,12 @@ def route_after_gap_analyzer(state: ResearchState) -> str:
             t.id not in done and t.status != TaskStatus.SKIPPED for t in plan.tasks
         )
     )
-    if state.get("gap_status") == "sufficient" and not pending:
-        return "tafsir_comparator"
     if pending or state.get("gap_status") == "insufficient":
         return "research_manager"
     if state.get("gap_status") == "sufficient":
-        return "tafsir_comparator"
+        if _wants_tafsir_comparison(state):
+            return "tafsir_comparator"
+        return "claim_extractor"
     return "research_manager"
 
 

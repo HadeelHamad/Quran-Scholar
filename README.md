@@ -91,9 +91,9 @@ Tools are wrapped in `src/quran_scholar/mcp/client.py` as LangChain tools
 │                              │                                  │
 │                 insufficient │ sufficient                       │
 │                 (more work)  ▼                                  │
-│                              Tafsir Comparator                  │
-│                                       │                         │
-│                              Claim Extractor                    │
+│                    (optional) Tafsir Comparator                 │
+│                         │ only if needs_tafsir_comparison       │
+│                         └──────────► Claim Extractor            │
 │                                       │                         │
 │                              Evidence Verifier                  │
 │                         ┌─────┴──────┐                          │
@@ -139,7 +139,7 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 | **Linguistic Researcher** | Word/root study **when planned**. |
 | **Context Researcher** | Asbab al-nuzool / source lists **when planned**. |
 | **Gap Analyzer** | Check whether collected evidence is enough for the plan; mark gaps and send the run back to the manager or onward. |
-| **Tafsir Comparator** | Compare tafsir sources on the same verse(s): agreements, differences, open questions. |
+| **Tafsir Comparator** | **Optional** — runs only if the plan sets `needs_tafsir_comparison` (e.g. user asks to compare mufassirin). |
 | **Claim Extractor** | Turn verified materials into auditable **claims**, each tied to `evidence_ids` (no free-floating assertions). |
 | **Evidence Verifier** | Check claims against evidence; pass → report, fail → loop via gap analyzer (until max iterations). |
 | **Report Generator** | Final **Arabic Q&A**: direct **الإجابة** + **الأدلة** (citations/excerpts) from collected evidence only. |
@@ -147,7 +147,7 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 ### Routing (short)
 
 - **After Research Manager:** one researcher, several in parallel, gap analysis, comparison, verification, or finish (report).
-- **After Gap Analyzer:** back to manager if gaps/pending tasks; else tafsir comparator.
+- **After Gap Analyzer:** back to manager if gaps/pending tasks; else **tafsir comparator** only when comparison is needed, otherwise **claim extractor**.
 - **After Evidence Verifier:** report if passed or iteration limit hit; else gap analyzer for another research wave.
 
 Smoke test (logs a live agent trace via `quran_scholar.trace`, then the report):

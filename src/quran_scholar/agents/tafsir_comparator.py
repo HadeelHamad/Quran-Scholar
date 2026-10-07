@@ -154,18 +154,39 @@ def _llm_compare(
 
 
 def run_tafsir_comparison(state: ResearchState) -> dict:
-    """Compare tafsir per selected verse; never invent unsupported disagreements."""
+    """Optional: compare tafsirs only when the research plan asks for it."""
+    plan = state.get("research_plan")
+    wants = bool(
+        plan
+        and (
+            plan.needs_tafsir_comparison
+            or "tafsir_comparison" in (plan.required_evidence_types or [])
+        )
+    )
+    lines: list[str] = [
+        trace("tafsir_comparator", "Tafsir comparison...", blank_before=True)
+    ]
+    if not wants:
+        lines.append(
+            trace(
+                "tafsir_comparator",
+                "Skipped — not required for this question.",
+            )
+        )
+        return {
+            "warnings": [
+                "tafsir_comparator: skipped (needs_tafsir_comparison=false)"
+            ],
+            **trace_lines(*lines),
+        }
+
     tafsirs = list(state.get("tafsir_evidence") or [])
     evidence_items = list(state.get("evidence_items") or [])
     selected = list(state.get("selected_verses") or [])
     n_sources = len({t.source_id for t in tafsirs})
-    lines: list[str] = [
-        trace(
-            "tafsir_comparator",
-            f"Comparing {n_sources} tafsir source(s)...",
-            blank_before=True,
-        )
-    ]
+    lines.append(
+        trace("tafsir_comparator", f"Comparing {n_sources} tafsir source(s)...")
+    )
 
     if not tafsirs:
         lines.append(

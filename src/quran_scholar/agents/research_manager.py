@@ -168,7 +168,9 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
                     "role": "system",
                     "content": (
                         "Choose ONE next action: gap_analysis, comparison, "
-                        "verification, or finish. No researcher actions."
+                        "verification, or finish. No researcher actions. "
+                        "Use comparison ONLY if needs_tafsir_comparison is true "
+                        "and comparisons are still missing."
                     ),
                 },
                 {

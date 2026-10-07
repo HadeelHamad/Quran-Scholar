@@ -28,7 +28,7 @@ from quran_scholar.state import ResearchState
 
 
 def build_graph():
-    """Planner → Manager ⇄ Researchers → Gap → Comparator → Claims → Verify → Report."""
+    """Planner → Manager ⇄ Researchers → Gap → (optional Comparator) → Claims → Verify → Report."""
     graph = StateGraph(ResearchState)
     nodes = {
         "planner": planner_node,
@@ -66,6 +66,7 @@ def build_graph():
         {
             "research_manager": "research_manager",
             "tafsir_comparator": "tafsir_comparator",
+            "claim_extractor": "claim_extractor",
         },
     )
     graph.add_edge("tafsir_comparator", "claim_extractor")
