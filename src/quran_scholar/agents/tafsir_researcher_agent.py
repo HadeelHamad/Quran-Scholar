@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
@@ -15,7 +16,6 @@ from quran_scholar.agents.mcp_agent import (
     run_researcher_agent,
     tool_had_mcp_error,
 )
-from quran_scholar.config import configured_tafsir_sources
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
@@ -191,9 +191,15 @@ def run_tafsir_research(state: ResearchState) -> dict:
     tid = state.get("current_task_id") or ""
     verses = selected_verses(state)
     plan: ResearchPlan | None = state.get("research_plan")
-    sources = configured_tafsir_sources(
-        plan.target_tafsir_sources if plan and plan.target_tafsir_sources else None
-    )
+    if plan and plan.target_tafsir_sources:
+        sources = list(plan.target_tafsir_sources)
+    else:
+        env = os.getenv("TAFSIR_SOURCES", "").strip()
+        sources = (
+            [s.strip() for s in env.split(",") if s.strip()]
+            if env
+            else ["tabary", "katheer", "baghawy", "saadi", "moyassar"]
+        )
     question = state.get("user_question") or ""
     warnings: list[str] = []
     lines = [

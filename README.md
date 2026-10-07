@@ -75,7 +75,7 @@ Tools are wrapped in `src/quran_scholar/mcp/client.py` as LangChain tools
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Web UI (FastAPI)  ← Arabic question → final Arabic report      │
+│  Web UI (FastAPI)  ← Arabic question → الإجابة + الأدلة         │
 └────────────────────────────┬────────────────────────────────────┘
                              │ invoke(ResearchState)
                              ▼
@@ -90,33 +90,27 @@ Tools are wrapped in `src/quran_scholar/mcp/client.py` as LangChain tools
 │                    └──────── Gap Analyzer ◄─────────────────────┘
 │                              │                                  │
 │                 insufficient │ sufficient                       │
-│                 (more work)  ▼                                  │
-│                    (optional) Tafsir Comparator                 │
-│                         │ only if needs_tafsir_comparison       │
-│                         └──────────► Claim Extractor            │
-│                                       │                         │
-│                              Evidence Verifier                  │
-│                         ┌─────┴──────┐                          │
-│                    retry│            │passed / max iters        │
-│                         ▼            ▼                          │
-│                  Gap Analyzer   Report Generator → END          │
+│                              ▼                                  │
+│              (optional) Tafsir Comparator ──┐                   │
+│               only if needs_tafsir_comparison│                  │
+│                              └──────────────► Report → END      │
 └─────────────────────────────────────────────────────────────────┘
                              │
                              ▼
               Tafsir MCP (HTTP) — role-scoped tools via create_agent
 ```
 
-**Shared state:** one `ResearchState` (`state.py`). Nodes return only fields they change. Evidence lists use append reducers so retries accumulate rather than wipe prior work.
+**Shared state:** one `ResearchState`. Nodes return only fields they change. Evidence lists append across iterations.
 
-**External services:** LLM (OpenAI-compatible / OpenRouter) for agents; Tafsir MCP for Quran/tafsir/linguistic/nuzool data.
+**External services:** LLM (OpenAI-compatible / OpenRouter); Tafsir MCP for retrieval.
 
 Wired in `src/quran_scholar/graph/builder.py`.
 
-Compiled graph diagram (exported from LangGraph):
+Compiled graph diagram:
 
 ![Quran Scholar LangGraph](docs/quran_scholar_graph.png)
 
-Regenerate with:
+Regenerate:
 
 ```bash
 uv run python -c "
@@ -132,23 +126,20 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 
 | Node | Responsibility |
 | --- | --- |
-| **Planner** | Turn the Arabic question into a **research plan only** (focus, tasks, needed evidence types). Does not answer the question or quote tafsir. |
-| **Research Manager** | Supervisor: pick the next action(s) from the plan (and gaps). Can fan out **parallel** researchers when tasks are independent. |
-| **Quran Researcher** | Text + meta MCP tools (`fetch_ayah`, `search_quran_text`, surah info, overview, stats, qira'at, …). |
-| **Tafsir Researcher** | Classical commentary **when planned** (`fetch_tafsir`, `search_in_tafsir`, list sources). |
+| **Planner** | Minimal research plan (which evidence types / tasks). Does not answer. |
+| **Research Manager** | Next researcher wave(s), optionally parallel; then gap / comparison / finish. |
+| **Quran Researcher** | Text + meta MCP tools (`fetch_ayah`, search, surah info, stats, qira'at, …). |
+| **Tafsir Researcher** | Classical commentary **when planned**. |
 | **Linguistic Researcher** | Word/root study **when planned**. |
-| **Context Researcher** | Asbab al-nuzool / source lists **when planned**. |
-| **Gap Analyzer** | Check whether collected evidence is enough for the plan; mark gaps and send the run back to the manager or onward. |
-| **Tafsir Comparator** | **Optional** — runs only if the plan sets `needs_tafsir_comparison` (e.g. user asks to compare mufassirin). |
-| **Claim Extractor** | Turn verified materials into auditable **claims**, each tied to `evidence_ids` (no free-floating assertions). |
-| **Evidence Verifier** | Check claims against evidence; pass → report, fail → loop via gap analyzer (until max iterations). |
-| **Report Generator** | Final **Arabic Q&A**: direct **الإجابة** + **الأدلة** (citations/excerpts) from collected evidence only. |
+| **Context Researcher** | Asbab al-nuzool **when planned**. |
+| **Gap Analyzer** | Deterministic sufficiency check vs the plan; loop or advance. |
+| **Tafsir Comparator** | **Optional** — only if `needs_tafsir_comparison`. |
+| **Report Generator** | Final Arabic **الإجابة** + **الأدلة** from collected evidence. |
 
 ### Routing (short)
 
-- **After Research Manager:** one researcher, several in parallel, gap analysis, comparison, verification, or finish (report).
-- **After Gap Analyzer:** back to manager if gaps/pending tasks; else **tafsir comparator** only when comparison is needed, otherwise **claim extractor**.
-- **After Evidence Verifier:** report if passed or iteration limit hit; else gap analyzer for another research wave.
+- **After Research Manager:** researcher(s), gap analysis, optional comparison, or finish (report).
+- **After Gap Analyzer:** back to manager if gaps/pending tasks; else optional comparator, otherwise **report**.
 
 Smoke test (logs a live agent trace via `quran_scholar.trace`, then the report):
 
@@ -181,8 +172,8 @@ Trace lines look like:
 
 - One shared `ResearchState`; nodes return **only** fields they change.
 - Append reducers on evidence/claims/findings so iterations cannot wipe prior work.
-- Only researchers are named `*_agent` (LLM + tools). Planner/manager/analysis/report use LLM or heuristics without tools.
-- Research iterates until verification passes or `max_research_iterations` is hit.
+- Only researchers are named `*_agent` (LLM + tools). Planner/manager/gap/report use LLM or heuristics without tools.
+- Research loops via gap analyzer until the plan is satisfied or `max_research_iterations` is hit.
 
 ## Attribution
 

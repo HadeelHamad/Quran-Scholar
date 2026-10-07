@@ -1,8 +1,6 @@
 """LLM modules: ``*_agent`` = create_agent + tools; others = LLM/heuristics without tools."""
 
-from quran_scholar.agents.claim_extractor import run_claim_extraction
 from quran_scholar.agents.context_researcher_agent import run_context_research
-from quran_scholar.agents.evidence_verifier import run_evidence_verification
 from quran_scholar.agents.gap_analyzer import run_gap_analysis
 from quran_scholar.agents.linguistic_researcher_agent import run_linguistic_research
 from quran_scholar.agents.llm import get_llm
@@ -23,7 +21,5 @@ __all__ = [
     "run_context_research",
     "run_gap_analysis",
     "run_tafsir_comparison",
-    "run_claim_extraction",
-    "run_evidence_verification",
     "run_report_generation",
 ]

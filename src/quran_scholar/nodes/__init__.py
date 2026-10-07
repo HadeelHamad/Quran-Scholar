@@ -1,8 +1,6 @@
-"""Graph nodes: mix of LLM agents and deterministic Python logic."""
+"""Graph nodes: tool agents, LLM helpers, and deterministic routing."""
 
 from quran_scholar.nodes.analysis import (
-    claim_extractor_node,
-    evidence_verifier_node,
     report_generator_node,
     tafsir_comparator_node,
 )
@@ -25,7 +23,5 @@ __all__ = [
     "context_researcher_node",
     "gap_analyzer_node",
     "tafsir_comparator_node",
-    "claim_extractor_node",
-    "evidence_verifier_node",
     "report_generator_node",
 ]

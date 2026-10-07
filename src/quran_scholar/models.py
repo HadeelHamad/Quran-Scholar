@@ -281,7 +281,6 @@ ResearchAction = Literal[
     "context_research",
     "gap_analysis",
     "comparison",
-    "verification",
     "finish",
 ]
 

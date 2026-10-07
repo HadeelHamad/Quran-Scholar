@@ -14,8 +14,6 @@ AGENT_LABELS = {
     "context_researcher": "ContextResearcher",
     "gap_analyzer": "GapAnalyzer",
     "tafsir_comparator": "TafsirComparator",
-    "claim_extractor": "ClaimExtractor",
-    "evidence_verifier": "EvidenceVerifier",
     "report_generator": "ReportGenerator",
 }
 
@@ -26,8 +24,7 @@ _ACTION_PHRASES = {
     "context_research": "Selecting context research...",
     "gap_analysis": "Running gap analysis...",
     "comparison": "Selecting tafsir comparison...",
-    "verification": "Starting verification follow-up...",
-    "finish": "Proceeding to final report...",
+    "finish": "Proceeding to final answer...",
 }
 
 logger = logging.getLogger("quran_scholar.trace")

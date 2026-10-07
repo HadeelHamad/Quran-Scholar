@@ -12,7 +12,6 @@ ROUTES = {
     "context_research": "context_researcher",
     "gap_analysis": "gap_analyzer",
     "comparison": "tafsir_comparator",
-    "verification": "evidence_verifier",
     "finish": "report_generator",
 }
 
@@ -46,14 +45,12 @@ def task_id_for_action(state: ResearchState, action: str) -> str:
 
 
 def _wants_tafsir_comparison(state: ResearchState) -> bool:
-    """Comparator is optional — only when the plan/user question needs it."""
     plan = state.get("research_plan")
     if plan is None:
         return False
     if plan.needs_tafsir_comparison:
         return True
-    types = plan.required_evidence_types or []
-    return "tafsir_comparison" in types
+    return "tafsir_comparison" in (plan.required_evidence_types or [])
 
 
 def route_after_gap_analyzer(state: ResearchState) -> str:
@@ -70,19 +67,5 @@ def route_after_gap_analyzer(state: ResearchState) -> str:
     if state.get("gap_status") == "sufficient":
         if _wants_tafsir_comparison(state):
             return "tafsir_comparator"
-        return "claim_extractor"
+        return "report_generator"
     return "research_manager"
-
-
-def verification_route(state: ResearchState) -> str:
-    result = state.get("verification_result")
-    if result is not None and getattr(result, "passed", False):
-        return "report_generator"
-    if int(state.get("research_iteration") or 0) >= int(
-        state.get("max_research_iterations") or 3
-    ):
-        return "report_generator"
-    return "gap_analyzer"
-
-
-route_after_evidence_verifier = verification_route

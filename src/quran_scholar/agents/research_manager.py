@@ -1,12 +1,7 @@
-"""Research Manager — pattern + next wave (or post-research stage)."""
+"""Research Manager — next researcher wave or finish (deterministic)."""
 
 from __future__ import annotations
 
-import json
-import os
-from typing import Any
-
-from quran_scholar.agents.llm import get_llm
 from quran_scholar.models import (
     ExecutionPattern,
     QuestionFocus,
@@ -71,7 +66,7 @@ def choose_execution_pattern(plan: ResearchPlan | None) -> ExecutionPattern:
 
 
 def decide_next_action(state: ResearchState) -> ResearchDecision:
-    """Deterministic research waves; optional LLM only after researchers finish."""
+    """Pick next researcher wave(s), gap check, optional comparison, or finish."""
     plan = state.get("research_plan")
     pattern = choose_execution_pattern(plan)
     done = set(state.get("completed_task_ids") or [])
@@ -90,9 +85,6 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
             execution_pattern=pattern,
             reasoning=reasoning,
         )
-
-    if state.get("verification_passed"):
-        return decision("finish", "Verification passed.")
 
     has_verses = bool(state.get("selected_verses"))
     by_action: dict[str, ResearchTask] = {}
@@ -143,63 +135,9 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
     gaps = list(state.get("unresolved_gaps") or [])
 
     if pending_research:
-        fallback = decision("gap_analysis", "Researcher tasks still pending.")
-    elif gaps and iteration < max_iters:
-        fallback = decision("gap_analysis", "Unresolved gaps remain.")
-    elif plan and plan.needs_tafsir_comparison and not state.get("tafsir_comparisons"):
-        fallback = decision("comparison", "Run tafsir comparison.")
-    elif not state.get("verification_passed"):
-        fallback = (
-            decision("finish", "Iteration budget exhausted.")
-            if iteration >= max_iters
-            else decision("verification", "Run evidence verification.")
-        )
-    else:
-        fallback = decision("finish", "Proceed to report.")
-
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key or api_key.startswith("your_"):
-        return fallback
-
-    try:
-        llm_decision = get_llm().with_structured_output(ResearchDecision).invoke(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "Choose ONE next action: gap_analysis, comparison, "
-                        "verification, or finish. No researcher actions. "
-                        "Use comparison ONLY if needs_tafsir_comparison is true "
-                        "and comparisons are still missing."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "execution_pattern": pattern.value,
-                            "gap_status": state.get("gap_status"),
-                            "unresolved_gaps": gaps,
-                            "needs_tafsir_comparison": bool(
-                                plan and plan.needs_tafsir_comparison
-                            ),
-                            "has_comparisons": bool(state.get("tafsir_comparisons")),
-                            "verification_passed": state.get("verification_passed"),
-                            "research_iteration": iteration,
-                            "max_research_iterations": max_iters,
-                        },
-                        ensure_ascii=False,
-                        default=str,
-                    ),
-                },
-            ]
-        )
-        if not isinstance(llm_decision, ResearchDecision):
-            llm_decision = ResearchDecision.model_validate(llm_decision)
-        if llm_decision.action in RESEARCHER_ACTIONS:
-            return fallback
-        return llm_decision.model_copy(
-            update={"execution_pattern": pattern, "dispatches": []}
-        )
-    except Exception:
-        return fallback
+        return decision("gap_analysis", "Researcher tasks still pending.")
+    if gaps and iteration < max_iters:
+        return decision("gap_analysis", "Unresolved gaps remain.")
+    if plan and plan.needs_tafsir_comparison and not state.get("tafsir_comparisons"):
+        return decision("comparison", "Run optional tafsir comparison.")
+    return decision("finish", "Research complete — write the answer.")

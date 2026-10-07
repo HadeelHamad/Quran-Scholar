@@ -5,8 +5,6 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 
 from quran_scholar.nodes.analysis import (
-    claim_extractor_node,
-    evidence_verifier_node,
     report_generator_node,
     tafsir_comparator_node,
 )
@@ -22,13 +20,12 @@ from quran_scholar.nodes.researchers import (
 from quran_scholar.nodes.routing import (
     route_after_gap_analyzer,
     route_after_research_manager,
-    verification_route,
 )
 from quran_scholar.state import ResearchState
 
 
 def build_graph():
-    """Planner → Manager ⇄ Researchers → Gap → (optional Comparator) → Claims → Verify → Report."""
+    """Planner → Manager ⇄ Researchers → Gap → (optional Comparator) → Report."""
     graph = StateGraph(ResearchState)
     nodes = {
         "planner": planner_node,
@@ -39,8 +36,6 @@ def build_graph():
         "context_researcher": context_researcher_node,
         "gap_analyzer": gap_analyzer_node,
         "tafsir_comparator": tafsir_comparator_node,
-        "claim_extractor": claim_extractor_node,
-        "evidence_verifier": evidence_verifier_node,
         "report_generator": report_generator_node,
     }
     for name, fn in nodes.items():
@@ -48,10 +43,20 @@ def build_graph():
 
     graph.add_edge(START, "planner")
     graph.add_edge("planner", "research_manager")
+    # Only list destinations the router can actually return (avoids fake self-loops
+    # and clutter in draw_mermaid / PNG diagrams).
     graph.add_conditional_edges(
         "research_manager",
         route_after_research_manager,
-        {k: k for k in nodes if k != "planner"},
+        {
+            "quran_researcher": "quran_researcher",
+            "tafsir_researcher": "tafsir_researcher",
+            "linguistic_researcher": "linguistic_researcher",
+            "context_researcher": "context_researcher",
+            "gap_analyzer": "gap_analyzer",
+            "tafsir_comparator": "tafsir_comparator",
+            "report_generator": "report_generator",
+        },
     )
     for researcher in (
         "quran_researcher",
@@ -66,16 +71,10 @@ def build_graph():
         {
             "research_manager": "research_manager",
             "tafsir_comparator": "tafsir_comparator",
-            "claim_extractor": "claim_extractor",
+            "report_generator": "report_generator",
         },
     )
-    graph.add_edge("tafsir_comparator", "claim_extractor")
-    graph.add_edge("claim_extractor", "evidence_verifier")
-    graph.add_conditional_edges(
-        "evidence_verifier",
-        verification_route,
-        {"gap_analyzer": "gap_analyzer", "report_generator": "report_generator"},
-    )
+    graph.add_edge("tafsir_comparator", "report_generator")
     graph.add_edge("report_generator", END)
     return graph.compile()
 

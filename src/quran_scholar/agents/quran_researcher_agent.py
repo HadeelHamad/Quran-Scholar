@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
@@ -15,7 +16,6 @@ from quran_scholar.agents.mcp_agent import (
     run_researcher_agent,
     tool_had_mcp_error,
 )
-from quran_scholar.config import max_quran_search_verses
 from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
@@ -295,7 +295,10 @@ def _deterministic_quran(
                         )
                     )
         if task_kind in ("", "quran_search", "verse_search") or not selected:
-            limit = max_quran_search_verses()
+            try:
+                limit = max(1, min(50, int(os.getenv("MAX_QURAN_SEARCH_VERSES", "15"))))
+            except ValueError:
+                limit = 15
             for concept in _heuristic_concepts(question):
                 outcome = safe_call_tool(
                     client,
@@ -345,7 +348,10 @@ def run_quran_research(state: ResearchState) -> dict:
     primary = plan.primary_verse if plan else None
     if primary is None:
         primary = parse_verse_ref(question)
-    limit = max_quran_search_verses()
+    try:
+        limit = max(1, min(50, int(os.getenv("MAX_QURAN_SEARCH_VERSES", "15"))))
+    except ValueError:
+        limit = 15
     brief = {
         "question": question,
         "primary_verse": (
