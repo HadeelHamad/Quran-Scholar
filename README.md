@@ -49,12 +49,38 @@ Tools are wrapped in `src/quran_scholar/mcp/client.py` as LangChain tools
 Optional offline server: `uvx tafsir-mcp` (needs working Xcode CLT on macOS if
 native wheels fail). Point a local proxy at `TAFSIR_MCP_URL` if you bridge stdio→HTTP.
 
+## Graph flow
+
+```
+START → Planner → Research Manager
+                      ↓ (conditional by task kind)
+         Quran / Tafsir / Linguistic / Context Researcher
+                      ↓
+                 Gap Analyzer
+              ↙ insufficient / sufficient ↘
+     Research Manager              Tafsir Comparator
+                                          ↓
+                                   Claim Extractor
+                                          ↓
+                                   Evidence Verifier
+                              ↙ retry / passed ↘
+                         Gap Analyzer      Report Generator → END
+```
+
+Wired in `src/quran_scholar/graph/builder.py` (stub nodes under `nodes/`).
+
+Smoke test:
+
+```bash
+uv run python -c "from quran_scholar.graph import build_graph; from quran_scholar.state import initial_research_state; print(build_graph().invoke(initial_research_state('ما تفسير آية الكرسي؟'))['final_report'])"
+```
+
 ## Design notes
 
 - One shared `ResearchState`; nodes return **only** fields they change.
+- Append reducers on evidence/claims/findings so iterations cannot wipe prior work.
 - Not every node is an agent — use LLMs for interpretation/planning; use Python for validation/routing.
 - Research iterates until verification passes or `max_research_iterations` is hit.
-- Evidence store lives in graph state (`evidence_items` + `claims`).
 
 ## Attribution
 

@@ -1,10 +1,15 @@
 """Shared LangGraph research state.
 
 Nodes return only the fields they change — never a full reconstructed state.
+
+Collections use append-style reducers (``operator.add``) so later research
+iterations cannot wipe earlier evidence. Scalar / "current value" fields use
+normal replacement semantics.
 """
 
 from __future__ import annotations
 
+import operator
 from typing import Annotated, TypedDict
 
 from langgraph.graph.message import add_messages
@@ -23,58 +28,54 @@ from quran_scholar.models import (
 )
 
 
-def _extend_list(left: list | None, right: list | None) -> list:
-    """Reducer: append new items (used for warnings/errors accumulators)."""
-    return (left or []) + (right or [])
-
-
 class ResearchState(TypedDict, total=False):
     """Single shared graph state for Quran Scholar research."""
 
-    # Input
+    # Input (replace)
     user_question: str
     language: str
 
     # Planning
-    research_plan: ResearchPlan
-    current_task_id: str
-    completed_task_ids: list[str]
+    research_plan: ResearchPlan  # replace
+    current_task_id: str  # replace
+    completed_task_ids: Annotated[list[str], operator.add]  # append
 
-    # Quran research
-    discovered_verses: list[VerseEvidence]
-    selected_verses: list[VerseEvidence]
+    # Quran research (append — accumulate across iterations)
+    discovered_verses: Annotated[list[VerseEvidence], operator.add]
+    selected_verses: Annotated[list[VerseEvidence], operator.add]
 
-    # Tafsir research
-    tafsir_evidence: list[TafsirEvidence]
+    # Tafsir research (append)
+    tafsir_evidence: Annotated[list[TafsirEvidence], operator.add]
 
-    # Supporting research
-    linguistic_evidence: list[LinguisticEvidence]
-    nuzool_evidence: list[NuzoolEvidence]
+    # Supporting research (append)
+    linguistic_evidence: Annotated[list[LinguisticEvidence], operator.add]
+    nuzool_evidence: Annotated[list[NuzoolEvidence], operator.add]
 
-    # Analysis
-    findings: list[Finding]
-    tafsir_comparisons: list[TafsirComparison]
+    # Analysis (append)
+    findings: Annotated[list[Finding], operator.add]
+    tafsir_comparisons: Annotated[list[TafsirComparison], operator.add]
 
-    # Evidence / claims
-    evidence_items: list[Evidence]
-    claims: list[Claim]
+    # Evidence / claims (append)
+    evidence_items: Annotated[list[Evidence], operator.add]
+    claims: Annotated[list[Claim], operator.add]
 
-    # Verification
+    # Verification (replace — current snapshot)
     verification_result: VerificationResult | None
     unsupported_claims: list[Claim]
 
-    # Control
+    # Control (replace)
     research_iteration: int
     max_research_iterations: int
     research_complete: bool
     verification_passed: bool
+    gap_status: str  # "insufficient" | "sufficient"
 
-    # Output
+    # Output (replace)
     final_report: str | None
 
-    # Diagnostics (append-only via reducer when used with Annotated)
-    warnings: Annotated[list[str], _extend_list]
-    errors: Annotated[list[str], _extend_list]
+    # Diagnostics (append)
+    warnings: Annotated[list[str], operator.add]
+    errors: Annotated[list[str], operator.add]
 
     # Optional agent message channel for LLM nodes
     messages: Annotated[list, add_messages]
@@ -106,6 +107,7 @@ def initial_research_state(
         max_research_iterations=max_research_iterations,
         research_complete=False,
         verification_passed=False,
+        gap_status="insufficient",
         final_report=None,
         warnings=[],
         errors=[],
