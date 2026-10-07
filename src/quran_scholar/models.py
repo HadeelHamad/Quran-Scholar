@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -193,3 +193,33 @@ class VerificationResult(BaseModel):
     unsupported_claim_ids: list[str] = Field(default_factory=list)
     missing_evidence_notes: list[str] = Field(default_factory=list)
     needs_more_research: bool = False
+
+
+ResearchAction = Literal[
+    "quran_research",
+    "tafsir_research",
+    "linguistic_research",
+    "context_research",
+    "gap_analysis",
+    "comparison",
+    "verification",
+    "finish",
+]
+
+
+class ResearchDecision(BaseModel):
+    """Supervisor decision from Research Manager — fixed action enum only."""
+
+    action: ResearchAction = Field(
+        description=(
+            "Next graph action from the fixed enum only. "
+            "Never invent node names."
+        )
+    )
+    task_id: str | None = Field(
+        default=None,
+        description="Plan task id when dispatching a researcher; else null",
+    )
+    reasoning: str = Field(
+        description="Brief rationale for this routing decision"
+    )

@@ -31,9 +31,22 @@ def gap_analyzer_node(state: ResearchState) -> dict:
     has_pending = bool(pending)
     budget_left = iteration < max_iters
 
+    gaps: list[str] = []
+    if has_pending:
+        gaps.append(
+            "Pending research tasks: " + ", ".join(t.id for t in pending)
+        )
+    if verse_count == 0:
+        gaps.append("No Quran verses collected yet")
+    if tafsir_count == 0 and plan and "tafsir" in (plan.required_evidence_types or []):
+        gaps.append("Tafsir evidence still missing")
+    if evidence_count == 0 and not has_pending:
+        gaps.append("Evidence store empty after research tasks")
+
     if has_pending and budget_left:
         return {
             "gap_status": "insufficient",
+            "unresolved_gaps": gaps,
             "research_complete": False,
             "research_iteration": iteration + 1,
         }
@@ -44,9 +57,11 @@ def gap_analyzer_node(state: ResearchState) -> dict:
     # During early stub phase with no MCP fills, treat finished task list as enough
     if not has_pending:
         sufficient = True
+        gaps = []
 
     return {
         "gap_status": "sufficient" if sufficient else "insufficient",
+        "unresolved_gaps": [] if sufficient else gaps,
         "research_complete": bool(sufficient or not budget_left),
         "research_iteration": iteration if has_pending else iteration,
     }

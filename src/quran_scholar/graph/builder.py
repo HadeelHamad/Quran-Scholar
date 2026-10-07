@@ -61,6 +61,9 @@ def build_graph():
             "linguistic_researcher": "linguistic_researcher",
             "context_researcher": "context_researcher",
             "gap_analyzer": "gap_analyzer",
+            "tafsir_comparator": "tafsir_comparator",
+            "evidence_verifier": "evidence_verifier",
+            "report_generator": "report_generator",
         },
     )
 
@@ -88,7 +91,7 @@ def build_graph():
         "evidence_verifier",
         route_after_evidence_verifier,
         {
-            "gap_analyzer": "gap_analyzer",
+            "research_manager": "research_manager",
             "report_generator": "report_generator",
         },
     )

@@ -2,24 +2,22 @@
 
 from __future__ import annotations
 
-from quran_scholar.models import ResearchTask, TaskStatus
+from quran_scholar.models import ResearchDecision, ResearchTask, TaskStatus
 from quran_scholar.state import ResearchState
 
-RESEARCHER_BY_KIND = {
-    "fetch_ayah": "quran_researcher",
-    "quran_search": "quran_researcher",
-    "verse_search": "quran_researcher",
-    "quran": "quran_researcher",
-    "tafsir_fetch": "tafsir_researcher",
-    "fetch_tafsir": "tafsir_researcher",
+# Fixed enum → graph node names (LLM never invents node names)
+ROUTES = {
+    "quran_research": "quran_researcher",
     "tafsir_research": "tafsir_researcher",
-    "tafsir": "tafsir_researcher",
-    "linguistic": "linguistic_researcher",
-    "linguistic_analysis": "linguistic_researcher",
-    "nuzool": "context_researcher",
-    "nuzool_research": "context_researcher",
-    "context": "context_researcher",
+    "linguistic_research": "linguistic_researcher",
+    "context_research": "context_researcher",
+    "gap_analysis": "gap_analyzer",
+    "comparison": "tafsir_comparator",
+    "verification": "evidence_verifier",
+    "finish": "report_generator",
 }
+
+DEFAULT_ROUTE = "gap_analyzer"
 
 
 def _tasks(state: ResearchState) -> list[ResearchTask]:
@@ -35,35 +33,35 @@ def _pending_tasks(state: ResearchState) -> list[ResearchTask]:
 
 
 def route_after_research_manager(state: ResearchState) -> str:
-    """Select which specialist researcher handles the current task."""
-    task_id = state.get("current_task_id")
-    for task in _tasks(state):
-        if task.id == task_id:
-            return RESEARCHER_BY_KIND.get(task.kind, "quran_researcher")
-    # No task selected → skip research and let gap analyzer decide
-    return "gap_analyzer"
+    """Map ResearchDecision.action through ROUTES (never free-form node names)."""
+    decision = state.get("research_decision")
+    if isinstance(decision, ResearchDecision):
+        return ROUTES.get(decision.action, DEFAULT_ROUTE)
+    if isinstance(decision, dict):
+        action = decision.get("action")
+        if action in ROUTES:
+            return ROUTES[action]
+    return DEFAULT_ROUTE
 
 
 def route_after_gap_analyzer(state: ResearchState) -> str:
     """Insufficient evidence loops to Research Manager; else continue."""
-    if state.get("research_complete"):
+    if state.get("research_complete") and state.get("gap_status") == "sufficient":
         return "tafsir_comparator"
-    if _pending_tasks(state):
+    if _pending_tasks(state) or state.get("gap_status") == "insufficient":
         return "research_manager"
     if state.get("gap_status") == "sufficient":
         return "tafsir_comparator"
-    # Still insufficient but no pending tasks — force analysis path
-    return "tafsir_comparator"
+    return "research_manager"
 
 
 def route_after_evidence_verifier(state: ResearchState) -> str:
-    """Failed verification retries via Gap Analyzer; pass → report."""
+    """Failed verification retries via Research Manager; pass → report."""
     if state.get("verification_passed"):
         return "report_generator"
 
     iteration = int(state.get("research_iteration") or 0)
     max_iters = int(state.get("max_research_iterations") or 3)
     if iteration < max_iters:
-        return "gap_analyzer"
-    # Budget exhausted — still produce a report
+        return "research_manager"
     return "report_generator"

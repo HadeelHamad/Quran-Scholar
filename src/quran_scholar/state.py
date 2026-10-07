@@ -20,6 +20,7 @@ from quran_scholar.models import (
     Finding,
     LinguisticEvidence,
     NuzoolEvidence,
+    ResearchDecision,
     ResearchPlan,
     TafsirComparison,
     TafsirEvidence,
@@ -35,10 +36,12 @@ class ResearchState(TypedDict, total=False):
     user_question: str
     language: str
 
-    # Planning
+    # Planning / supervision
     research_plan: ResearchPlan  # replace
+    research_decision: ResearchDecision | None  # replace — supervisor output
     current_task_id: str  # replace
     completed_task_ids: Annotated[list[str], operator.add]  # append
+    unresolved_gaps: list[str]  # replace — current gap list from gap analyzer
 
     # Quran research (append — accumulate across iterations)
     discovered_verses: Annotated[list[VerseEvidence], operator.add]
@@ -91,7 +94,9 @@ def initial_research_state(
     return ResearchState(
         user_question=user_question,
         language=language,
+        research_decision=None,
         completed_task_ids=[],
+        unresolved_gaps=[],
         discovered_verses=[],
         selected_verses=[],
         tafsir_evidence=[],
