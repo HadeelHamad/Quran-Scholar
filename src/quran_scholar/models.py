@@ -167,13 +167,33 @@ class Finding(BaseModel):
 
 
 class TafsirComparison(BaseModel):
-    """Comparison across multiple tafsir sources for one verse."""
+    """Comparison across retrieved tafsir sources for one verse (evidence-grounded)."""
 
-    ref: VerseRef
+    verse_reference: str = Field(
+        description="Human-readable verse ref, e.g. '2:153'"
+    )
     agreements: list[str] = Field(default_factory=list)
     differences: list[str] = Field(default_factory=list)
+    difference_types: list[str] = Field(
+        default_factory=list,
+        description="Categories of real interpretive differences when present",
+    )
+    evidence_ids: list[str] = Field(
+        default_factory=list,
+        description="Ids of tafsir evidence items used in this comparison",
+    )
+    # Compatibility / structured ref
+    ref: VerseRef | None = None
     source_ids: list[str] = Field(default_factory=list)
     summary: str = ""
+
+
+class ResearchGap(BaseModel):
+    """Gap Analyzer output — mostly from deterministic checks."""
+
+    sufficient: bool
+    missing_evidence: list[str] = Field(default_factory=list)
+    recommended_tasks: list[ResearchTask] = Field(default_factory=list)
 
 
 class Evidence(BaseModel):

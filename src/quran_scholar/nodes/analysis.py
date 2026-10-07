@@ -1,17 +1,15 @@
-"""Analysis / verification / report nodes (stubs)."""
+"""Analysis / verification / report nodes."""
 
 from __future__ import annotations
 
+from quran_scholar.agents.tafsir_comparator_agent import run_tafsir_comparison
 from quran_scholar.models import ClaimSupport, VerificationResult
 from quran_scholar.state import ResearchState
 
 
 def tafsir_comparator_node(state: ResearchState) -> dict:
-    """Compare tafsir sources — LLM boundary (stub)."""
-    n = len(state.get("tafsir_evidence") or [])
-    return {
-        "warnings": [f"tafsir_comparator: stub compared {n} tafsir items"],
-    }
+    """Compare retrieved tafsir — agreement unless differences are evidence-backed."""
+    return run_tafsir_comparison(state)
 
 
 def claim_extractor_node(state: ResearchState) -> dict:
