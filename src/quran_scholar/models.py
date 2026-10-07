@@ -122,7 +122,7 @@ class TafsirEvidence(BaseModel):
 
 
 class LinguisticEvidence(BaseModel):
-    """Word/root linguistic analysis from MCP tools."""
+    """Word/root linguistic analysis from MCP tools (raw tool output, not LLM paraphrase)."""
 
     query: str
     root: str | None = None
@@ -132,14 +132,29 @@ class LinguisticEvidence(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-class NuzoolEvidence(BaseModel):
-    """Asbab al-nuzool with isnad when available."""
+class NuzoolStatus(str, Enum):
+    """Distinguish missing data from errors — never collapse all to None."""
 
-    ref: VerseRef
-    reason: str
+    FOUND = "FOUND"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
+    ERROR = "ERROR"
+
+
+class NuzoolEvidence(BaseModel):
+    """Asbab al-nuzool with explicit FOUND / NOT_AVAILABLE / ERROR status."""
+
+    status: Literal["FOUND", "NOT_AVAILABLE", "ERROR"]
+    content: str | None = None
+    source: str | None = None
+    surah_number: int = Field(ge=1, le=114)
+    ayah_number: int = Field(ge=1)
     isnad: str | None = None
     source_tool: str = "fetch_nuzool_reason"
     raw: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def ref(self) -> VerseRef:
+        return VerseRef(surah=self.surah_number, ayah=self.ayah_number)
 
 
 class Finding(BaseModel):
