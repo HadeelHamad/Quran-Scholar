@@ -9,8 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.agents.helpers import make_evidence, pack, session_fail
-from quran_scholar.agents.mcp_agent import (
+from quran_scholar.graph.nodes.helpers import make_evidence, pack, session_fail
+from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
     parse_tool_json,
     run_researcher_agent,
@@ -21,7 +21,7 @@ from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import ResearchPlan, VerseEvidence, VerseRef
-from quran_scholar.question import normalize_question_text, parse_verse_ref
+from quran_scholar.graph.nodes.planner import normalize_question_text, parse_verse_ref
 from quran_scholar.state import ResearchState
 
 QURAN_SYSTEM = """You are the Quran Researcher for Quran Scholar.
@@ -430,3 +430,9 @@ def run_quran_research(state: ResearchState) -> dict:
         selected_verses=selected,
         evidence_items=verse_evidence + meta_evidence,
     )
+
+
+def quran_researcher_node(state: ResearchState) -> dict:
+    from quran_scholar.graph.routing import task_id_for_action
+    patched = {**state, "current_task_id": task_id_for_action(state, "quran_research")}
+    return run_quran_research(patched)  # type: ignore[arg-type]

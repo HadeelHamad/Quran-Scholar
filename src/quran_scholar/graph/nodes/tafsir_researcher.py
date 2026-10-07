@@ -9,8 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.agents.helpers import make_evidence, pack, selected_verses, session_fail
-from quran_scholar.agents.mcp_agent import (
+from quran_scholar.graph.nodes.helpers import make_evidence, pack, selected_verses, session_fail
+from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
     parse_tool_json,
     run_researcher_agent,
@@ -285,3 +285,9 @@ def run_tafsir_research(state: ResearchState) -> dict:
             for t in items
         ],
     )
+
+
+def tafsir_researcher_node(state: ResearchState) -> dict:
+    from quran_scholar.graph.routing import task_id_for_action
+    patched = {**state, "current_task_id": task_id_for_action(state, "tafsir_research")}
+    return run_tafsir_research(patched)  # type: ignore[arg-type]

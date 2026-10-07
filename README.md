@@ -28,12 +28,10 @@ word roots · reasons of revelation · surah info / statistics / qira'at.
 
 ```
 src/quran_scholar/
-├── models.py       # Pydantic evidence / plan / claim schemas
+├── models.py       # Pydantic evidence / plan schemas
 ├── state.py        # Shared ResearchState for the graph
 ├── mcp/            # Tafsir MCP client adapter
-├── agents/         # Tool agents (*_agent) + LLM helpers (no tools)
-├── nodes/          # Graph node wrappers + routing
-├── graph/          # StateGraph wiring
+├── graph/          # StateGraph wiring, routing, and node implementations
 └── web/            # FastAPI UI (Arabic question → report)
 ```
 
@@ -141,7 +139,7 @@ Path('docs/quran_scholar_graph.png').write_bytes(
 - **After Research Manager:** researcher(s), gap analysis, optional comparison, or finish (report).
 - **After Gap Analyzer:** back to manager if gaps/pending tasks; else optional comparator, otherwise **report**.
 
-Smoke test (node state updates log via `quran_scholar.nodes`; report prints at the end):
+Smoke test (node state updates log via `quran_scholar.graph.nodes`; report prints at the end):
 
 ```bash
 uv run python -c "
@@ -158,7 +156,7 @@ print(out.get('final_report') or '')
 
 - One shared `ResearchState`; nodes return **only** fields they change.
 - Append reducers on evidence lists so iterations cannot wipe prior work.
-- Only researchers are named `*_agent` (LLM + tools). Planner/manager/gap/report use LLM or heuristics without tools.
+- Researcher nodes use LLM + MCP tools; planner/manager/gap/report use LLM or heuristics without tools.
 - Research loops via gap analyzer until the plan is satisfied or `max_research_iterations` is hit.
 
 ## Attribution

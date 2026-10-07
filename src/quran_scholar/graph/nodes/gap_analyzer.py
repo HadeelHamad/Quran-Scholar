@@ -147,3 +147,7 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
                 update={"tasks": list(plan.tasks) + new_tasks}
             )
     return updates
+
+
+def gap_analyzer_node(state: ResearchState) -> dict:
+    return run_gap_analysis(state)

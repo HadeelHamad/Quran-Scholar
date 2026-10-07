@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.agents.helpers import make_evidence, pack, session_fail
-from quran_scholar.agents.mcp_agent import (
+from quran_scholar.graph.nodes.helpers import make_evidence, pack, session_fail
+from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
     parse_tool_json,
     run_researcher_agent,
@@ -289,3 +289,9 @@ def run_linguistic_research(state: ResearchState) -> dict:
             for x in items
         ],
     )
+
+
+def linguistic_researcher_node(state: ResearchState) -> dict:
+    from quran_scholar.graph.routing import task_id_for_action
+    patched = {**state, "current_task_id": task_id_for_action(state, "linguistic_research")}
+    return run_linguistic_research(patched)  # type: ignore[arg-type]

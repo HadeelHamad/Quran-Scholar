@@ -11,7 +11,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel
 
-from quran_scholar.agents.llm import get_llm
+from quran_scholar.graph.nodes.llm import get_llm
 from quran_scholar.mcp.client import get_tafsir_mcp_tools
 from quran_scholar.mcp.toolsets import ResearcherRole
 

@@ -141,3 +141,26 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
     if plan and plan.needs_tafsir_comparison and not state.get("tafsir_comparisons"):
         return decision("comparison", "Run optional tafsir comparison.")
     return decision("finish", "Research complete — write the answer.")
+
+
+def research_manager_node(state: ResearchState) -> dict:
+    plan = state.get("research_plan")
+    if plan is None:
+        return {
+            "current_task_id": "",
+            "research_decision": None,
+            "execution_pattern": None,
+            "warnings": ["research_manager: missing research_plan"],
+            "errors": ["research_manager: cannot decide without research_plan"],
+        }
+
+    pattern = choose_execution_pattern(plan)
+    decision = decide_next_action(state)
+    if decision.execution_pattern is None:
+        decision = decision.model_copy(update={"execution_pattern": pattern})
+
+    return {
+        "research_decision": decision,
+        "execution_pattern": decision.execution_pattern or pattern,
+        "current_task_id": decision.task_id or "",
+    }

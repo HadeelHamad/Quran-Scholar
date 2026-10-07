@@ -7,13 +7,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.agents.helpers import (
+from quran_scholar.graph.nodes.helpers import (
     make_evidence,
     pack,
     selected_verses,
     session_fail,
 )
-from quran_scholar.agents.mcp_agent import (
+from quran_scholar.graph.nodes.mcp_agent import (
     has_llm_credentials,
     parse_tool_json,
     run_researcher_agent,
@@ -293,3 +293,9 @@ def run_context_research(state: ResearchState) -> dict:
         nuzool_evidence=items,
         evidence_items=evidence,
     )
+
+
+def context_researcher_node(state: ResearchState) -> dict:
+    from quran_scholar.graph.routing import task_id_for_action
+    patched = {**state, "current_task_id": task_id_for_action(state, "context_research")}
+    return run_context_research(patched)  # type: ignore[arg-type]

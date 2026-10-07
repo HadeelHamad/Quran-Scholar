@@ -8,7 +8,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from quran_scholar.agents.llm import get_llm
+from quran_scholar.graph.nodes.llm import get_llm
 from quran_scholar.state import ResearchState
 
 REPORT_SYSTEM = """You answer the user's Quran-related question in Modern Standard Arabic.
@@ -142,3 +142,7 @@ def run_report_generation(state: ResearchState) -> dict:
         "research_complete": True,
         "warnings": [f"report_generator: Q&A from {n} evidence item(s)"],
     }
+
+
+def report_generator_node(state: ResearchState) -> dict:
+    return run_report_generation(state)

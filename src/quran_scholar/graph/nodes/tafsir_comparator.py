@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quran_scholar.agents.llm import get_llm
+from quran_scholar.graph.nodes.llm import get_llm
 from quran_scholar.models import (
     Evidence,
     TafsirComparison,
@@ -206,3 +206,7 @@ def run_tafsir_comparison(state: ResearchState) -> dict:
             f"from {len(tafsirs)} tafsir excerpt(s)"
         ],
     }
+
+
+def tafsir_comparator_node(state: ResearchState) -> dict:
+    return run_tafsir_comparison(state)

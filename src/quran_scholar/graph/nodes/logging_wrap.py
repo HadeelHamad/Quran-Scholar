@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-logger = logging.getLogger("quran_scholar.nodes")
+logger = logging.getLogger("quran_scholar.graph.nodes")
 
 _MAX_STR = 240
 _MAX_LIST_PREVIEW = 3

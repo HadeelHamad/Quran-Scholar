@@ -4,21 +4,17 @@ from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
 
-from quran_scholar.nodes.analysis import (
-    report_generator_node,
-    tafsir_comparator_node,
-)
-from quran_scholar.nodes.gap_analyzer import gap_analyzer_node
-from quran_scholar.nodes.planner import planner_node
-from quran_scholar.nodes.research_manager import research_manager_node
-from quran_scholar.nodes.researchers import (
-    context_researcher_node,
-    linguistic_researcher_node,
-    quran_researcher_node,
-    tafsir_researcher_node,
-)
-from quran_scholar.nodes.logging_wrap import with_state_logging
-from quran_scholar.nodes.routing import (
+from quran_scholar.graph.nodes.context_researcher import context_researcher_node
+from quran_scholar.graph.nodes.gap_analyzer import gap_analyzer_node
+from quran_scholar.graph.nodes.linguistic_researcher import linguistic_researcher_node
+from quran_scholar.graph.nodes.logging_wrap import with_state_logging
+from quran_scholar.graph.nodes.planner import planner_node
+from quran_scholar.graph.nodes.quran_researcher import quran_researcher_node
+from quran_scholar.graph.nodes.report_generator import report_generator_node
+from quran_scholar.graph.nodes.research_manager import research_manager_node
+from quran_scholar.graph.nodes.tafsir_comparator import tafsir_comparator_node
+from quran_scholar.graph.nodes.tafsir_researcher import tafsir_researcher_node
+from quran_scholar.graph.routing import (
     route_after_gap_analyzer,
     route_after_research_manager,
 )
