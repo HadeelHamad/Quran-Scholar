@@ -15,15 +15,6 @@ class TaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class ClaimSupport(str, Enum):
-    """Legacy alias levels — prefer VerificationLevel for new code."""
-
-    SUPPORTED = "supported"
-    PARTIAL = "partial"
-    UNSUPPORTED = "unsupported"
-    UNKNOWN = "unknown"
-
-
 class VerificationLevel(str, Enum):
     DIRECT = "DIRECT"
     SUPPORTED_SYNTHESIS = "SUPPORTED_SYNTHESIS"
@@ -170,14 +161,6 @@ class LinguisticEvidence(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-class NuzoolStatus(str, Enum):
-    """Distinguish missing data from errors — never collapse all to None."""
-
-    FOUND = "FOUND"
-    NOT_AVAILABLE = "NOT_AVAILABLE"
-    ERROR = "ERROR"
-
-
 class NuzoolEvidence(BaseModel):
     """Asbab al-nuzool with explicit FOUND / NOT_AVAILABLE / ERROR status."""
 
@@ -259,11 +242,6 @@ class Claim(BaseModel):
     )
     verification_status: ClaimVerificationStatus | str = ClaimVerificationStatus.PENDING
     notes: str | None = None
-
-    # Backward-compatible aliases
-    @property
-    def text(self) -> str:
-        return self.statement
 
 
 class ClaimVerdict(BaseModel):

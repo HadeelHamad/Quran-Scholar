@@ -18,6 +18,7 @@ from quran_scholar.models import (
     VerificationResult,
 )
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 VERIFIER_SYSTEM = """You are a strict evidence verifier for Quranic research claims.
 
@@ -184,6 +185,9 @@ def run_evidence_verification(state: ResearchState) -> dict:
     """Strictly verify claims against the evidence store."""
     claims = list(state.get("claims") or [])
     evid_by_id = _evidence_map(state)
+    lines: list[str] = [
+        trace("evidence_verifier", "Verifying claims...", blank_before=True)
+    ]
 
     if not claims:
         result = VerificationResult(
@@ -196,11 +200,15 @@ def run_evidence_verification(state: ResearchState) -> dict:
             summary="No claims",
             needs_more_research=False,
         )
+        lines.append(
+            trace("evidence_verifier", "No claims — passed vacuously.")
+        )
         return {
             "verification_result": result,
             "verification_passed": True,
             "unsupported_claims": [],
             "warnings": ["evidence_verifier: no claims — passed vacuously"],
+            **trace_lines(*lines),
         }
 
     verdicts = _llm_verdicts(claims, evid_by_id)
@@ -254,6 +262,23 @@ def run_evidence_verification(state: ResearchState) -> dict:
         if c.id in unsupported or c.id in conflicting
     ]
 
+    lines.append(
+        trace(
+            "evidence_verifier",
+            f"Verified {len(verified)}/{len(claims)} claim(s).",
+        )
+    )
+    if unsupported or conflicting:
+        lines.append(
+            trace(
+                "evidence_verifier",
+                f"Research required for "
+                f"{len(unsupported) + len(conflicting)} unsupported/conflicting claim(s).",
+            )
+        )
+    elif passed:
+        lines.append(trace("evidence_verifier", "All claims verified."))
+
     return {
         "claims": updated_claims,
         "verification_result": result,
@@ -262,4 +287,5 @@ def run_evidence_verification(state: ResearchState) -> dict:
         "warnings": [
             f"evidence_verifier: {result.summary} coverage={coverage:.2f}"
         ],
+        **trace_lines(*lines),
     }

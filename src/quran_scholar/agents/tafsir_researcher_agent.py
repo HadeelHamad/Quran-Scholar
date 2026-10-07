@@ -19,6 +19,7 @@ from quran_scholar.models import (
     VerseRef,
 )
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 # Attribution often looks like: "تفسير ابن كثير، أبو الفداء … (ت. 774هـ)"
 _ATTRIB_RE = re.compile(
@@ -109,96 +110,98 @@ def run_tafsir_research(state: ResearchState) -> dict:
     mcp_failures = 0
     empty_results = 0
 
+    lines: list[str] = [
+        trace("tafsir_researcher", "Retrieving tafsir...", blank_before=True)
+    ]
+
     if not verses:
+        lines.append(
+            trace("tafsir_researcher", "Skipped — no selected verses yet.")
+        )
         return {
             "warnings": ["tafsir_researcher: no selected_verses to fetch"],
             "completed_task_ids": [task_id] if task_id else [],
+            **trace_lines(*lines),
         }
 
     tafsir_items: list[TafsirEvidence] = []
 
     try:
-        client_cm = ScopedTafsirMCPClient("tafsir")
-        client_cm.__enter__()
-    except MCPError as exc:
-        # Session failure — do NOT claim tafsir is absent
-        msg = f"Tafsir retrieval failed (MCP session — not 'no tafsir'): {exc}"
-        return {
-            "warnings": [msg],
-            "errors": [msg],
-            "completed_task_ids": [task_id] if task_id else [],
-        }
-    except Exception as exc:
-        msg = f"Tafsir retrieval failed (session — not 'no tafsir'): {exc}"
-        return {
-            "warnings": [msg],
-            "errors": [msg],
-            "completed_task_ids": [task_id] if task_id else [],
-        }
-
-    try:
-        for verse in verses:
-            ref = verse.ref
-            label = f"fetch_tafsir {ref.surah}:{ref.ayah}"
-            outcome = safe_call_tool(
-                client_cm,
-                "fetch_tafsir",
-                {
-                    "surah": ref.surah,
-                    "ayah": ref.ayah,
-                    "sources": sources,
-                },
-                label=label,
-            )
-            warnings.extend(outcome.warnings)
-
-            if outcome.failed:
-                mcp_failures += 1
-                # Explicit: failure ≠ absence of tafsir
-                continue
-
-            records = _records_from_payload(outcome.data)
-            usable = [
-                rec
-                for rec in records
-                if str(rec.get("text") or "").strip()
-            ]
-            if not usable:
-                empty_results += 1
-                outcome = mark_empty(
-                    outcome,
-                    message=(
-                        f"NO_EVIDENCE: MCP succeeded but no tafsir text for "
-                        f"{ref.surah}:{ref.ayah} (sources={sources})"
-                    ),
+        with ScopedTafsirMCPClient("tafsir") as client:
+            for verse in verses:
+                ref = verse.ref
+                outcome = safe_call_tool(
+                    client,
+                    "fetch_tafsir",
+                    {"surah": ref.surah, "ayah": ref.ayah, "sources": sources},
+                    label=f"fetch_tafsir {ref.surah}:{ref.ayah}",
                 )
                 warnings.extend(outcome.warnings)
-                continue
+                if outcome.failed:
+                    mcp_failures += 1
+                    continue
 
-            for rec in usable:
-                source_id = str(rec.get("source") or rec.get("source_id") or "unknown")
-                text = str(rec.get("text") or "")
-                title, author, death = _parse_attribution(
-                    rec.get("attribution")
-                    if isinstance(rec.get("attribution"), str)
-                    else None
-                )
-                tafsir_items.append(
-                    TafsirEvidence(
-                        ref=VerseRef(surah=ref.surah, ayah=ref.ayah),
-                        source_id=source_id,
-                        source_title=title,
-                        author=author,
-                        death_year_hijri=death,
-                        text=text,
-                        source_tool="fetch_tafsir",
-                        raw=rec,
+                usable = [
+                    rec
+                    for rec in _records_from_payload(outcome.data)
+                    if str(rec.get("text") or "").strip()
+                ]
+                if not usable:
+                    empty_results += 1
+                    warnings.extend(
+                        mark_empty(
+                            outcome,
+                            f"NO_EVIDENCE: MCP succeeded but no tafsir text for "
+                            f"{ref.surah}:{ref.ayah} (sources={sources})",
+                        )
                     )
-                )
-    finally:
-        client_cm.__exit__(None, None, None)
+                    continue
+
+                for rec in usable:
+                    source_id = str(
+                        rec.get("source") or rec.get("source_id") or "unknown"
+                    )
+                    title, author, death = _parse_attribution(
+                        rec.get("attribution")
+                        if isinstance(rec.get("attribution"), str)
+                        else None
+                    )
+                    tafsir_items.append(
+                        TafsirEvidence(
+                            ref=VerseRef(surah=ref.surah, ayah=ref.ayah),
+                            source_id=source_id,
+                            source_title=title,
+                            author=author,
+                            death_year_hijri=death,
+                            text=str(rec.get("text") or ""),
+                            source_tool="fetch_tafsir",
+                            raw=rec,
+                        )
+                    )
+    except MCPError as exc:
+        msg = f"Tafsir retrieval failed (MCP session — not 'no tafsir'): {exc}"
+        lines.append(trace("tafsir_researcher", f"MCP session failed: {exc}"))
+        return {
+            "warnings": [msg],
+            "errors": [msg],
+            "completed_task_ids": [task_id] if task_id else [],
+            **trace_lines(*lines),
+        }
 
     evidence = [_tafsir_to_evidence(t) for t in tafsir_items]
+    n_sources = len({t.source_id for t in tafsir_items})
+    lines.append(
+        trace(
+            "tafsir_researcher",
+            f"Retrieved {len(tafsir_items)} excerpt(s) from "
+            f"{n_sources} source(s)"
+            + (
+                f" ({mcp_failures} MCP failure(s) — not treated as no tafsir)."
+                if mcp_failures
+                else "."
+            ),
+        )
+    )
     summary = (
         f"tafsir_researcher: fetched={len(tafsir_items)} "
         f"mcp_failures={mcp_failures} empty_results={empty_results} "
@@ -208,6 +211,7 @@ def run_tafsir_research(state: ResearchState) -> dict:
         "tafsir_evidence": tafsir_items,
         "evidence_items": evidence,
         "warnings": warnings + [summary],
+        **trace_lines(*lines),
     }
     if task_id:
         updates["completed_task_ids"] = [task_id]

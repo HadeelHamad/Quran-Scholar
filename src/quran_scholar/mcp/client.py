@@ -30,9 +30,6 @@ from quran_scholar.mcp.toolsets import (
 
 DEFAULT_TAFSIR_MCP_URL = "https://mcp.tafsir.net/mcp"
 
-# Backward-compatible alias — prefer role toolsets in toolsets.py
-PRIMARY_TOOLS = ALL_PROJECT_TOOLS
-
 
 class TafsirMCPError(MCPError):
     """Raised when the Tafsir MCP HTTP session fails."""
@@ -302,7 +299,7 @@ def get_tafsir_mcp_tools(
     client = TafsirMCPClient(url=url)
     client.initialize()
     catalog = client.list_tools()
-    allowed = tools_for(role) if role else (PRIMARY_TOOLS if primary_only else None)
+    allowed = tools_for(role) if role else (ALL_PROJECT_TOOLS if primary_only else None)
 
     tools: list[StructuredTool] = []
     for meta in catalog:
@@ -337,8 +334,3 @@ def get_tafsir_mcp_tools(
         )
 
     return client, tools
-
-
-def tafsir_mcp_adapter(*, role: ResearcherRole | None = None):
-    """Backward-compatible name: prefer get_tafsir_mcp_tools(role=...)."""
-    return get_tafsir_mcp_tools(role=role)

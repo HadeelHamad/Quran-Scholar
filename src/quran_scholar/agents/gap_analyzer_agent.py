@@ -16,6 +16,7 @@ from quran_scholar.models import (
     TaskStatus,
 )
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 SEMANTIC_SYSTEM = """You assess whether collected Quranic research evidence can answer the user question.
 You receive deterministic missing_evidence already found. Only ADD gaps that are clearly
@@ -297,6 +298,19 @@ def apply_gap_to_state_updates(state: ResearchState, gap: ResearchGap) -> dict[s
     max_iters = int(state.get("max_research_iterations") or 3)
     budget_left = iteration < max_iters
 
+    if gap.sufficient:
+        t_line = trace(
+            "gap_analyzer",
+            "Evidence sufficient.",
+            blank_before=True,
+        )
+    else:
+        t_line = trace(
+            "gap_analyzer",
+            f"Evidence insufficient — {len(gap.missing_evidence)} gap(s).",
+            blank_before=True,
+        )
+
     updates: dict[str, Any] = {
         "research_gap": gap,
         "unresolved_gaps": list(gap.missing_evidence),
@@ -308,6 +322,7 @@ def apply_gap_to_state_updates(state: ResearchState, gap: ResearchGap) -> dict[s
             f"missing={len(gap.missing_evidence)} "
             f"recommended={len(gap.recommended_tasks)}"
         ],
+        **trace_lines(t_line),
     }
 
     # Merge recommended tasks into plan (replace plan object)

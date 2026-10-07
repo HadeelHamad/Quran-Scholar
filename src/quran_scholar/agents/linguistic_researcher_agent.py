@@ -23,6 +23,7 @@ from quran_scholar.models import (
     VerseRef,
 )
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 TERM_PICKER_SYSTEM = """You pick important Quranic content words for linguistic study.
 Given a verse and the user question, return up to 3 word_no values (1-based positions
@@ -165,18 +166,29 @@ def run_linguistic_research(state: ResearchState) -> dict:
     Skips when the plan does not call for linguistic work.
     """
     task_id = state.get("current_task_id") or ""
+    lines: list[str] = [
+        trace("linguistic_researcher", "Analyzing roots...", blank_before=True)
+    ]
     should, reason = _should_run_linguistic(state)
     if not should:
+        lines.append(
+            trace("linguistic_researcher", f"Skipped ({reason}).")
+        )
         return {
             "warnings": [f"linguistic_researcher: skipped ({reason})"],
             "completed_task_ids": [task_id] if task_id else [],
+            **trace_lines(*lines),
         }
 
     verses = list(state.get("selected_verses") or [])
     if not verses:
+        lines.append(
+            trace("linguistic_researcher", "Skipped — no selected verses.")
+        )
         return {
             "warnings": ["linguistic_researcher: no selected_verses"],
             "completed_task_ids": [task_id] if task_id else [],
+            **trace_lines(*lines),
         }
 
     question = state.get("user_question") or ""
@@ -186,116 +198,126 @@ def run_linguistic_research(state: ResearchState) -> dict:
     roots_seen: set[str] = set()
 
     try:
-        client_cm = ScopedTafsirMCPClient("linguistic")
-        client_cm.__enter__()
-    except (MCPError, Exception) as exc:
+        with ScopedTafsirMCPClient("linguistic") as client:
+            for verse in verses[:5]:
+                picks = _pick_terms(question, verse)
+                for word_no in picks.word_numbers:
+                    outcome = safe_call_tool(
+                        client,
+                        "analyze_word",
+                        {
+                            "surah": verse.ref.surah,
+                            "ayah": verse.ref.ayah,
+                            "word_no": word_no,
+                            "aspects": ["meaning", "sarf", "root", "irab"],
+                        },
+                        label=(
+                            f"analyze_word {verse.ref.surah}:"
+                            f"{verse.ref.ayah}#{word_no}"
+                        ),
+                    )
+                    warnings.extend(outcome.warnings)
+                    if outcome.failed:
+                        continue
+                    payload = mcp_payload(outcome.data)
+                    if not isinstance(payload, dict):
+                        warnings.extend(
+                            mark_empty(
+                                outcome,
+                                "NO_EVIDENCE: analyze_word succeeded but payload "
+                                f"unusable for {verse.ref.surah}:"
+                                f"{verse.ref.ayah}#{word_no}",
+                            )
+                        )
+                        continue
+                    root = _extract_root(payload)
+                    word = str(payload.get("word") or f"word_no={word_no}")
+                    linguistic_items.append(
+                        LinguisticEvidence(
+                            query=(
+                                f"{verse.ref.surah}:{verse.ref.ayah}"
+                                f"#{word_no}:{word}"
+                            ),
+                            root=root,
+                            analysis=json.dumps(payload, ensure_ascii=False),
+                            related_verses=[verse.ref],
+                            source_tool="analyze_word",
+                            raw=payload,
+                        )
+                    )
+                    if root:
+                        roots_seen.add(root)
+
+                for hint in picks.roots_hint:
+                    if hint and hint.strip():
+                        roots_seen.add(hint.strip())
+
+            for root in sorted(roots_seen)[:5]:
+                stats_out = safe_call_tool(
+                    client,
+                    "get_root_stats",
+                    {"root": root},
+                    label=f"get_root_stats {root}",
+                )
+                warnings.extend(stats_out.warnings)
+                occ_out = safe_call_tool(
+                    client,
+                    "find_root_occurrences",
+                    {"root": root, "limit": 20},
+                    label=f"find_root_occurrences {root}",
+                )
+                warnings.extend(occ_out.warnings)
+                if stats_out.failed and occ_out.failed:
+                    continue
+                stats = mcp_payload(stats_out.data) if stats_out.ok else None
+                occ = as_list(occ_out.data) if occ_out.ok else []
+                related = [
+                    VerseRef(surah=int(h["surah"]), ayah=int(h["ayah"]))
+                    for h in occ[:20]
+                    if "surah" in h and "ayah" in h
+                ]
+                linguistic_items.append(
+                    LinguisticEvidence(
+                        query=f"root:{root}",
+                        root=root,
+                        analysis=json.dumps(
+                            {
+                                "stats": stats,
+                                "occurrences_sample": occ[:10],
+                                "stats_mcp_failed": stats_out.failed,
+                                "occ_mcp_failed": occ_out.failed,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        related_verses=related[:20],
+                        source_tool="get_root_stats+find_root_occurrences",
+                        raw={
+                            "stats": (
+                                stats if isinstance(stats, dict) else {"value": stats}
+                            ),
+                            "occurrences": occ,
+                        },
+                    )
+                )
+    except MCPError as exc:
         msg = f"Linguistic retrieval failed (MCP session — not 'no analysis'): {exc}"
+        lines.append(trace("linguistic_researcher", f"MCP session failed: {exc}"))
         return {
             "warnings": [msg],
             "errors": [msg],
             "completed_task_ids": [task_id] if task_id else [],
+            **trace_lines(*lines),
         }
 
-    try:
-        for verse in verses[:5]:
-            picks = _pick_terms(question, verse)
-            for word_no in picks.word_numbers:
-                outcome = safe_call_tool(
-                    client_cm,
-                    "analyze_word",
-                    {
-                        "surah": verse.ref.surah,
-                        "ayah": verse.ref.ayah,
-                        "word_no": word_no,
-                        "aspects": ["meaning", "sarf", "root", "irab"],
-                    },
-                    label=f"analyze_word {verse.ref.surah}:{verse.ref.ayah}#{word_no}",
-                )
-                warnings.extend(outcome.warnings)
-                if outcome.failed:
-                    continue
-                payload = mcp_payload(outcome.data)
-                if not isinstance(payload, dict):
-                    warnings.extend(
-                        mark_empty(
-                            outcome,
-                            message=(
-                                "NO_EVIDENCE: analyze_word succeeded but payload "
-                                f"unusable for {verse.ref.surah}:{verse.ref.ayah}#{word_no}"
-                            ),
-                        ).warnings
-                    )
-                    continue
-                root = _extract_root(payload)
-                word = str(payload.get("word") or f"word_no={word_no}")
-                analysis = json.dumps(payload, ensure_ascii=False)
-                linguistic_items.append(
-                    LinguisticEvidence(
-                        query=f"{verse.ref.surah}:{verse.ref.ayah}#{word_no}:{word}",
-                        root=root,
-                        analysis=analysis,
-                        related_verses=[verse.ref],
-                        source_tool="analyze_word",
-                        raw=payload,
-                    )
-                )
-                if root:
-                    roots_seen.add(root)
-
-            for hint in picks.roots_hint:
-                if hint and hint.strip():
-                    roots_seen.add(hint.strip())
-
-        for root in sorted(roots_seen)[:5]:
-            stats_out = safe_call_tool(
-                client_cm,
-                "get_root_stats",
-                {"root": root},
-                label=f"get_root_stats {root}",
-            )
-            warnings.extend(stats_out.warnings)
-            occ_out = safe_call_tool(
-                client_cm,
-                "find_root_occurrences",
-                {"root": root, "limit": 20},
-                label=f"find_root_occurrences {root}",
-            )
-            warnings.extend(occ_out.warnings)
-            if stats_out.failed and occ_out.failed:
-                continue
-            stats = mcp_payload(stats_out.data) if stats_out.ok else None
-            occ = as_list(occ_out.data) if occ_out.ok else []
-            related: list[VerseRef] = []
-            for hit in occ[:20]:
-                if "surah" in hit and "ayah" in hit:
-                    related.append(
-                        VerseRef(surah=int(hit["surah"]), ayah=int(hit["ayah"]))
-                    )
-            linguistic_items.append(
-                LinguisticEvidence(
-                    query=f"root:{root}",
-                    root=root,
-                    analysis=json.dumps(
-                        {
-                            "stats": stats,
-                            "occurrences_sample": occ[:10],
-                            "stats_mcp_failed": stats_out.failed,
-                            "occ_mcp_failed": occ_out.failed,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    related_verses=related[:20],
-                    source_tool="get_root_stats+find_root_occurrences",
-                    raw={
-                        "stats": stats if isinstance(stats, dict) else {"value": stats},
-                        "occurrences": occ,
-                    },
-                )
-            )
-    finally:
-        client_cm.__exit__(None, None, None)
-
     evidence = [_ling_to_evidence(x) for x in linguistic_items]
+    root_list = sorted(r for r in roots_seen if r)
+    lines.append(
+        trace(
+            "linguistic_researcher",
+            f"Analyzed {len(linguistic_items)} item(s)"
+            + (f"; roots: {', '.join(root_list)}." if root_list else "."),
+        )
+    )
     updates: dict[str, Any] = {
         "linguistic_evidence": linguistic_items,
         "evidence_items": evidence,
@@ -304,6 +326,7 @@ def run_linguistic_research(state: ResearchState) -> dict:
             f"linguistic_researcher: ran ({reason}); "
             f"items={len(linguistic_items)} roots={sorted(roots_seen)}"
         ],
+        **trace_lines(*lines),
     }
     if task_id:
         updates["completed_task_ids"] = [task_id]

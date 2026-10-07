@@ -18,6 +18,7 @@ from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import Evidence, ResearchPlan, VerseEvidence, VerseRef
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 SEARCH_CONCEPTS_SYSTEM = """You generate short Quran search queries for Tafsir MCP FTS5.
 Return 1–4 concise ARABIC keyword stems (no English; avoid leading ال when possible).
@@ -254,112 +255,128 @@ def run_quran_research(state: ResearchState) -> dict:
     discovered: list[VerseEvidence] = []
     selected: list[VerseEvidence] = []
     mcp_failures = 0
+    lines: list[str] = [
+        trace("quran_researcher", "Searching Quran...", blank_before=True)
+    ]
 
     try:
-        client_cm = ScopedTafsirMCPClient("quran")
-        client_cm.__enter__()
-    except (MCPError, Exception) as exc:
-        msg = f"Quran retrieval failed (MCP session — not 'no verses'): {exc}"
-        return {
-            "warnings": [msg],
-            "errors": [msg],
-            "completed_task_ids": [task_id] if task_id else [],
-        }
+        with ScopedTafsirMCPClient("quran") as client:
+            primary = plan.primary_verse if plan else None
+            if primary is None:
+                primary = _parse_verse_ref(question)
 
-    try:
-        primary = plan.primary_verse if plan else None
-        if primary is None:
-            primary = _parse_verse_ref(question)
+            task_kind = ""
+            if plan and task_id:
+                for t in plan.tasks:
+                    if t.id == task_id:
+                        task_kind = t.kind
+                        break
 
-        task_kind = ""
-        if plan and task_id:
-            for t in plan.tasks:
-                if t.id == task_id:
-                    task_kind = t.kind
-                    break
-
-        if primary and task_kind in ("", "fetch_ayah", "verse_search"):
-            outcome = safe_call_tool(
-                client_cm,
-                "fetch_ayah",
-                {"surah": primary.surah, "ayah": primary.ayah},
-                label=f"fetch_ayah {primary.surah}:{primary.ayah}",
-            )
-            warnings.extend(outcome.warnings)
-            if outcome.failed:
-                mcp_failures += 1
-            else:
-                payload = mcp_payload(outcome.data)
-                ve = (
-                    _record_to_verse(payload, "fetch_ayah")
-                    if isinstance(payload, dict)
-                    else None
+            if primary and task_kind in ("", "fetch_ayah", "verse_search"):
+                lines.append(
+                    trace(
+                        "quran_researcher",
+                        f"Fetching ayah {primary.surah}:{primary.ayah}...",
+                    )
                 )
-                if ve:
-                    discovered.append(ve)
-                    selected.append(
-                        ve.model_copy(
-                            update={"relevance": "primary verse from question/plan"}
-                        )
-                    )
-                else:
-                    warnings.extend(
-                        mark_empty(
-                            outcome,
-                            message=(
-                                f"NO_EVIDENCE: MCP succeeded but no ayah payload for "
-                                f"{primary.surah}:{primary.ayah}"
-                            ),
-                        ).warnings
-                    )
-
-        if task_kind in ("", "quran_search", "verse_search") or not selected:
-            concepts = _generate_search_concepts(question, language)
-            limit = quran_search_limit()
-            for concept in concepts:
                 outcome = safe_call_tool(
-                    client_cm,
-                    "search_quran_text",
-                    {"query": concept, "limit": limit},
-                    label=f"search_quran_text '{concept}'",
+                    client,
+                    "fetch_ayah",
+                    {"surah": primary.surah, "ayah": primary.ayah},
+                    label=f"fetch_ayah {primary.surah}:{primary.ayah}",
                 )
                 warnings.extend(outcome.warnings)
                 if outcome.failed:
                     mcp_failures += 1
-                    continue
-                hits = as_list(outcome.data)
-                if not hits:
-                    warnings.extend(
-                        mark_empty(
-                            outcome,
-                            message=(
-                                f"NO_EVIDENCE: MCP search succeeded with zero hits "
-                                f"for '{concept}'"
-                            ),
-                        ).warnings
+                else:
+                    payload = mcp_payload(outcome.data)
+                    ve = (
+                        _record_to_verse(payload, "fetch_ayah")
+                        if isinstance(payload, dict)
+                        else None
                     )
-                    continue
-                for rec in hits:
-                    ve = _record_to_verse(rec, "search_quran_text")
                     if ve:
                         discovered.append(ve)
+                        selected.append(
+                            ve.model_copy(
+                                update={
+                                    "relevance": "primary verse from question/plan"
+                                }
+                            )
+                        )
+                    else:
+                        warnings.extend(
+                            mark_empty(
+                                outcome,
+                                f"NO_EVIDENCE: MCP succeeded but no ayah payload for "
+                                f"{primary.surah}:{primary.ayah}",
+                            )
+                        )
 
-        discovered = _dedupe_verses(discovered)
+            if task_kind in ("", "quran_search", "verse_search") or not selected:
+                concepts = _generate_search_concepts(question, language)
+                limit = quran_search_limit()
+                for concept in concepts:
+                    outcome = safe_call_tool(
+                        client,
+                        "search_quran_text",
+                        {"query": concept, "limit": limit},
+                        label=f"search_quran_text '{concept}'",
+                    )
+                    warnings.extend(outcome.warnings)
+                    if outcome.failed:
+                        mcp_failures += 1
+                        continue
+                    hits = as_list(outcome.data)
+                    if not hits:
+                        warnings.extend(
+                            mark_empty(
+                                outcome,
+                                f"NO_EVIDENCE: MCP search succeeded with zero hits "
+                                f"for '{concept}'",
+                            )
+                        )
+                        continue
+                    for rec in hits:
+                        ve = _record_to_verse(rec, "search_quran_text")
+                        if ve:
+                            discovered.append(ve)
 
-        if not selected:
-            selected = _evaluate_selection(question, discovered)
-        else:
-            extras = [
-                d
-                for d in discovered
-                if (d.ref.surah, d.ref.ayah)
-                not in {(s.ref.surah, s.ref.ayah) for s in selected}
-            ]
-            if extras and task_kind == "quran_search":
-                more = _evaluate_selection(question, extras)
-                selected = _dedupe_verses(selected + more)
-    finally:
-        client_cm.__exit__(None, None, None)
+            discovered = _dedupe_verses(discovered)
+            lines.append(
+                trace(
+                    "quran_researcher",
+                    f"Found {len(discovered)} candidate verse(s).",
+                )
+            )
+
+            if not selected:
+                selected = _evaluate_selection(question, discovered)
+            else:
+                extras = [
+                    d
+                    for d in discovered
+                    if (d.ref.surah, d.ref.ayah)
+                    not in {(s.ref.surah, s.ref.ayah) for s in selected}
+                ]
+                if extras and task_kind == "quran_search":
+                    more = _evaluate_selection(question, extras)
+                    selected = _dedupe_verses(selected + more)
+            lines.append(
+                trace(
+                    "quran_researcher",
+                    f"Selected {len(selected)} relevant verse(s).",
+                )
+            )
+    except MCPError as exc:
+        msg = f"Quran retrieval failed (MCP session — not 'no verses'): {exc}"
+        lines.append(trace("quran_researcher", f"MCP session failed: {exc}"))
+        return {
+            "warnings": [msg],
+            "errors": [msg],
+            "completed_task_ids": [task_id] if task_id else [],
+            **trace_lines(*lines),
+        }
 
     evidence = [_verse_to_evidence(v) for v in selected]
     updates: dict[str, Any] = {
@@ -371,6 +388,7 @@ def run_quran_research(state: ResearchState) -> dict:
             f"quran_researcher: discovered={len(discovered)} "
             f"selected={len(selected)} mcp_failures={mcp_failures}"
         ],
+        **trace_lines(*lines),
     }
     if task_id:
         updates["completed_task_ids"] = [task_id]

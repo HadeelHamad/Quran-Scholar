@@ -18,6 +18,7 @@ from quran_scholar.models import (
 )
 from quran_scholar.services.citation_manager import citation_manager
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 REPORT_SYSTEM = """You are the Report Generator for Quran Scholar.
 
@@ -290,6 +291,11 @@ def _llm_arabic_report(payload: dict[str, Any]) -> str | None:
 
 def run_report_generation(state: ResearchState) -> dict:
     """Constrained report from verified claims/evidence only (Arabic)."""
+    t0 = trace(
+        "report_generator",
+        "Generating final report.",
+        blank_before=True,
+    )
     payload = _pack_inputs(state)
     report = _llm_arabic_report(payload)
     if report is None:
@@ -297,6 +303,11 @@ def run_report_generation(state: ResearchState) -> dict:
 
     n_claims = len(payload["verified_claims"])
     n_evidence = len(payload["verified_evidence"])
+    t1 = trace(
+        "report_generator",
+        f"Report ready ({n_claims} verified claim(s), "
+        f"{n_evidence} evidence item(s)).",
+    )
     return {
         "final_report": report,
         "research_complete": True,
@@ -305,4 +316,5 @@ def run_report_generation(state: ResearchState) -> dict:
             f"{n_claims} verified claim(s), {n_evidence} evidence item(s); "
             f"unsupported/conflicting claims excluded"
         ],
+        **trace_lines(t0, t1),
     }

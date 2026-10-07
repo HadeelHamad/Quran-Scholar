@@ -18,6 +18,7 @@ from quran_scholar.models import (
     TafsirComparison,
 )
 from quran_scholar.state import ResearchState
+from quran_scholar.trace import trace, trace_lines
 
 EXTRACTOR_SYSTEM = """You extract auditable claims from Quranic research materials.
 
@@ -212,10 +213,13 @@ def _llm_claims(state: ResearchState) -> list[Claim] | None:
 def run_claim_extraction(state: ResearchState) -> dict:
     """Convert findings / comparisons / evidence into auditable claims."""
     evidence = state.get("evidence_items") or []
+    t0 = trace("claim_extractor", "Extracting claims...", blank_before=True)
     if not evidence and not (state.get("tafsir_comparisons") or []):
+        t1 = trace("claim_extractor", "No evidence to ground claims.")
         return {
             "claims": [],
             "warnings": ["claim_extractor: no evidence to ground claims"],
+            **trace_lines(t0, t1),
         }
 
     claims = _llm_claims(state)
@@ -223,10 +227,12 @@ def run_claim_extraction(state: ResearchState) -> dict:
         claims = _deterministic_claims(state)
 
     claims = _reject_unverified(claims)
+    t1 = trace("claim_extractor", f"Extracted {len(claims)} claim(s).")
     return {
         "claims": claims,
         "warnings": [
             f"claim_extractor: extracted {len(claims)} claim(s) "
             f"(all with evidence_ids)"
         ],
+        **trace_lines(t0, t1),
     }

@@ -83,6 +83,7 @@ class ResearchState(TypedDict, total=False):
     # Diagnostics (append)
     warnings: Annotated[list[str], operator.add]
     errors: Annotated[list[str], operator.add]
+    trace_log: Annotated[list[str], operator.add]  # human-readable run trace
 
     # Optional agent message channel for LLM nodes
     messages: Annotated[list, add_messages]
@@ -122,5 +123,6 @@ def initial_research_state(
         final_report=None,
         warnings=[],
         errors=[],
+        trace_log=[],
         messages=[],
     )
