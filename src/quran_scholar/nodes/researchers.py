@@ -1,7 +1,9 @@
-"""Specialist researcher nodes (stubs — MCP wiring comes next)."""
+"""Specialist researcher nodes (Quran / Tafsir wired; others still stubs)."""
 
 from __future__ import annotations
 
+from quran_scholar.agents.quran_researcher_agent import run_quran_research
+from quran_scholar.agents.tafsir_researcher_agent import run_tafsir_research
 from quran_scholar.state import ResearchState
 
 
@@ -16,13 +18,13 @@ def _complete_current_task(state: ResearchState, label: str) -> dict:
 
 
 def quran_researcher_node(state: ResearchState) -> dict:
-    """Quran Researcher — verse search / fetch_ayah via Tafsir MCP."""
-    return _complete_current_task(state, "quran_researcher")
+    """Find verses: search → evaluate → select (discovered ≠ selected)."""
+    return run_quran_research(state)
 
 
 def tafsir_researcher_node(state: ResearchState) -> dict:
-    """Tafsir Researcher — fetch_tafsir / search_in_tafsir via Tafsir MCP."""
-    return _complete_current_task(state, "tafsir_researcher")
+    """Fetch raw tafsir for selected_verses; store separately from findings."""
+    return run_tafsir_research(state)
 
 
 def linguistic_researcher_node(state: ResearchState) -> dict:
