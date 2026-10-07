@@ -15,9 +15,7 @@ from quran_scholar.graph.nodes.mcp_agent import (
     run_researcher_agent,
     tool_had_mcp_error,
 )
-from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.parse import as_list, mcp_payload
-from quran_scholar.mcp.safe import safe_call_tool
 from quran_scholar.models import LinguisticEvidence, ResearchPlan, VerseRef
 from quran_scholar.state import ResearchState
 
@@ -135,61 +133,6 @@ def _items_from_tool_calls(tool_calls: list) -> tuple[list[LinguisticEvidence], 
     return items, warnings
 
 
-def _deterministic_linguistic(
-    verses: list, question: str
-) -> tuple[list[LinguisticEvidence], list[str]]:
-    """Simple fallback: analyze first content-like word of up to 3 verses."""
-    items: list[LinguisticEvidence] = []
-    warnings: list[str] = []
-    skip = {"إن", "في", "من", "على", "إلى", "عن", "ما", "لا", "أن", "يا", "و", "ف"}
-    with ScopedTafsirMCPClient("linguistic") as client:
-        for verse in verses[:3]:
-            words = [w for w in (verse.text_uthmani or "").split() if w.strip()]
-            idxs = [
-                i + 1
-                for i, w in enumerate(words)
-                if len(re.sub(r"[^\u0600-\u06FF]", "", w)) >= 3
-                and re.sub(r"[^\u0600-\u06FF/]", "", w) not in skip
-            ][:2]
-            for word_no in idxs:
-                outcome = safe_call_tool(
-                    client,
-                    "analyze_word",
-                    {
-                        "surah": verse.ref.surah,
-                        "ayah": verse.ref.ayah,
-                        "word_no": word_no,
-                        "aspects": ["meaning", "sarf", "root", "irab"],
-                    },
-                    label=f"analyze_word {verse.ref.surah}:{verse.ref.ayah}#{word_no}",
-                )
-                warnings.extend(outcome.warnings)
-                if outcome.failed:
-                    continue
-                payload = mcp_payload(outcome.data)
-                if not isinstance(payload, dict):
-                    continue
-                root = _extract_root(payload)
-                items.append(
-                    LinguisticEvidence(
-                        query=f"{verse.ref.surah}:{verse.ref.ayah}#{word_no}",
-                        root=root,
-                        analysis=json.dumps(payload, ensure_ascii=False),
-                        related_verses=[verse.ref],
-                        source_tool="analyze_word",
-                        raw=payload,
-                    )
-                )
-                if root:
-                    for tool, args in (
-                        ("get_root_stats", {"root": root}),
-                        ("find_root_occurrences", {"root": root, "limit": 20}),
-                    ):
-                        out = safe_call_tool(client, tool, args, label=f"{tool} {root}")
-                        warnings.extend(out.warnings)
-    return items, warnings
-
-
 def run_linguistic_research(state: ResearchState) -> dict:
     tid = state.get("current_task_id") or ""
     plan: ResearchPlan | None = state.get("research_plan")
@@ -237,32 +180,27 @@ def run_linguistic_research(state: ResearchState) -> dict:
         "Call linguistic MCP tools as needed."
     )
 
-    items: list[LinguisticEvidence] = []
-    warnings: list[str] = []
-    tools_used: list[str] = []
-
-    if has_llm_credentials():
-        agent_out = run_researcher_agent(
-            role="linguistic",
-            system_prompt=LING_SYSTEM,
-            user_message=user_msg,
-            response_format=LinguisticAgentSummary,
-            name="linguistic_researcher",
+    if not has_llm_credentials():
+        return pack(
+            tid,
+            warnings=["linguistic_researcher: no OPENAI_API_KEY — cannot run agent"],
+            errors=["linguistic_researcher: no OPENAI_API_KEY — cannot run agent"],
         )
-        warnings.extend(agent_out.warnings)
-        tools_used = agent_out.tools_used
-        items, w2 = _items_from_tool_calls(agent_out.tool_calls)
-        warnings.extend(w2)
-        if not items:
-            warnings.append(
-                "linguistic_researcher: agent empty — deterministic fallback"
-            )
-            items, w3 = _deterministic_linguistic(verses, question)
-            warnings.extend(w3)
-    else:
-        items, w = _deterministic_linguistic(verses, question)
-        warnings.extend(w)
-        tools_used = ["analyze_word"]
+
+    warnings: list[str] = []
+    agent_out = run_researcher_agent(
+        role="linguistic",
+        system_prompt=LING_SYSTEM,
+        user_message=user_msg,
+        response_format=LinguisticAgentSummary,
+        name="linguistic_researcher",
+    )
+    warnings.extend(agent_out.warnings)
+    tools_used = agent_out.tools_used
+    items, w2 = _items_from_tool_calls(agent_out.tool_calls)
+    warnings.extend(w2)
+    if not items:
+        warnings.append("linguistic_researcher: agent found nothing")
 
     return pack(
         tid,

@@ -16,9 +16,7 @@ from quran_scholar.graph.nodes.mcp_agent import (
     run_researcher_agent,
     tool_had_mcp_error,
 )
-from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.parse import as_list, mcp_payload
-from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import ResearchPlan, TafsirEvidence, VerseRef
 from quran_scholar.state import ResearchState
 
@@ -142,50 +140,8 @@ def _items_from_tool_calls(tool_calls: list) -> tuple[list[TafsirEvidence], list
     return items, warnings, mcp_failures
 
 
-def _deterministic_fetch(
-    verses: list, sources: list[str]
-) -> tuple[list[TafsirEvidence], list[str], int, int]:
-    """Fallback when create_agent cannot run (no API key)."""
-    items: list[TafsirEvidence] = []
-    warnings: list[str] = []
-    mcp_failures = empty_results = 0
-    with ScopedTafsirMCPClient("tafsir") as client:
-        for verse in verses:
-            ref = verse.ref
-            outcome = safe_call_tool(
-                client,
-                "fetch_tafsir",
-                {"surah": ref.surah, "ayah": ref.ayah, "sources": sources},
-                label=f"fetch_tafsir {ref.surah}:{ref.ayah}",
-            )
-            warnings.extend(outcome.warnings)
-            if outcome.failed:
-                mcp_failures += 1
-                continue
-            payload = mcp_payload(outcome.data)
-            records = _records_from_payload(payload)
-            usable = [r for r in records if str(r.get("text") or "").strip()]
-            if not usable:
-                empty_results += 1
-                warnings.extend(
-                    mark_empty(
-                        outcome,
-                        f"NO_EVIDENCE: MCP succeeded but no tafsir text for "
-                        f"{ref.surah}:{ref.ayah} (sources={sources})",
-                    )
-                )
-                continue
-            for rec in usable:
-                item = _record_to_tafsir(
-                    rec, source_tool="fetch_tafsir", fallback_ref=ref
-                )
-                if item:
-                    items.append(item)
-    return items, warnings, mcp_failures, empty_results
-
-
 def run_tafsir_research(state: ResearchState) -> dict:
-    """Retrieve tafsir via create_agent tool-calling (or deterministic fallback)."""
+    """Retrieve tafsir via create_agent tool-calling only."""
     tid = state.get("current_task_id") or ""
     verses = selected_verses(state)
     plan: ResearchPlan | None = state.get("research_plan")
@@ -206,6 +162,13 @@ def run_tafsir_research(state: ResearchState) -> dict:
             warnings=["tafsir_researcher: no selected_verses to fetch"],
         )
 
+    if not has_llm_credentials():
+        return pack(
+            tid,
+            warnings=["tafsir_researcher: no OPENAI_API_KEY — cannot run agent"],
+            errors=["tafsir_researcher: no OPENAI_API_KEY — cannot run agent"],
+        )
+
     verse_brief = [
         {
             "surah": v.ref.surah,
@@ -221,44 +184,26 @@ def run_tafsir_research(state: ResearchState) -> dict:
         "Call the appropriate MCP tools to gather tafsir evidence."
     )
 
-    items: list[TafsirEvidence] = []
-    mcp_failures = empty_results = 0
-    tools_used: list[str] = []
-
-    if has_llm_credentials():
-        agent_out = run_researcher_agent(
-            role="tafsir",
-            system_prompt=TAFSIR_SYSTEM,
-            user_message=user_msg,
-            response_format=TafsirAgentSummary,
-            name="tafsir_researcher",
-        )
-        warnings.extend(agent_out.warnings)
-        tools_used = agent_out.tools_used
-        items, w2, mcp_failures = _items_from_tool_calls(agent_out.tool_calls)
-        warnings.extend(w2)
-        if not items and verses:
-            # Agent failed to gather — fall back to direct fetch
-            warnings.append(
-                "tafsir_researcher: agent produced no excerpts — "
-                "falling back to fetch_tafsir"
-            )
-            items, w3, mcp_failures, empty_results = _deterministic_fetch(
-                verses, sources
-            )
-            warnings.extend(w3)
-            tools_used = tools_used or ["fetch_tafsir"]
-    else:
-        items, w, mcp_failures, empty_results = _deterministic_fetch(verses, sources)
-        warnings.extend(w)
-        tools_used = ["fetch_tafsir"]
+    agent_out = run_researcher_agent(
+        role="tafsir",
+        system_prompt=TAFSIR_SYSTEM,
+        user_message=user_msg,
+        response_format=TafsirAgentSummary,
+        name="tafsir_researcher",
+    )
+    warnings.extend(agent_out.warnings)
+    tools_used = agent_out.tools_used
+    items, w2, mcp_failures = _items_from_tool_calls(agent_out.tool_calls)
+    warnings.extend(w2)
+    if not items:
+        warnings.append("tafsir_researcher: agent found nothing")
 
     return pack(
         tid,
         warnings=warnings
         + [
             f"tafsir_researcher: fetched={len(items)} "
-            f"mcp_failures={mcp_failures} empty_results={empty_results} "
+            f"mcp_failures={mcp_failures} "
             f"sources={sources} tools={tools_used}"
         ],
         tafsir_evidence=items,

@@ -18,9 +18,7 @@ from quran_scholar.graph.nodes.mcp_agent import (
     run_researcher_agent,
     tool_had_mcp_error,
 )
-from quran_scholar.mcp.client import ScopedTafsirMCPClient
 from quran_scholar.mcp.parse import mcp_payload
-from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import NuzoolEvidence
 from quran_scholar.state import ResearchState
 
@@ -137,65 +135,6 @@ def _items_from_tool_calls(tool_calls: list) -> tuple[list[NuzoolEvidence], list
     return items, warnings
 
 
-def _deterministic_nuzool(verses: list) -> tuple[list[NuzoolEvidence], list[str]]:
-    items: list[NuzoolEvidence] = []
-    warnings: list[str] = []
-    with ScopedTafsirMCPClient("context") as client:
-        for verse in verses:
-            surah, ayah = verse.ref.surah, verse.ref.ayah
-            outcome = safe_call_tool(
-                client,
-                "fetch_nuzool_reason",
-                {"surah": surah, "ayah": ayah},
-                label=f"fetch_nuzool_reason {surah}:{ayah}",
-            )
-            warnings.extend(outcome.warnings)
-            if outcome.failed:
-                items.append(
-                    NuzoolEvidence(
-                        status="ERROR",
-                        content=outcome.error or "MCP request failed",
-                        source=None,
-                        surah_number=surah,
-                        ayah_number=ayah,
-                        raw={"error": outcome.error, "mcp_failed": True},
-                    )
-                )
-                continue
-            payload = mcp_payload(outcome.data)
-            if not isinstance(payload, dict):
-                warnings.extend(
-                    mark_empty(
-                        outcome,
-                        f"NO_EVIDENCE: unexpected nuzool payload for {surah}:{ayah}",
-                    )
-                )
-                continue
-            sources = payload.get("sources")
-            if isinstance(sources, list) and sources:
-                for entry in sources:
-                    if isinstance(entry, dict):
-                        items.append(_classify(surah, ayah, entry))
-            else:
-                warnings.extend(
-                    mark_empty(
-                        outcome,
-                        f"NO_EVIDENCE: no nuzool sources for {surah}:{ayah}",
-                    )
-                )
-                items.append(
-                    NuzoolEvidence(
-                        status="NOT_AVAILABLE",
-                        content="No nuzool sources returned for this ayah",
-                        source=None,
-                        surah_number=surah,
-                        ayah_number=ayah,
-                        raw=payload,
-                    )
-                )
-    return items, warnings
-
-
 def run_context_research(state: ResearchState) -> dict:
     tid = state.get("current_task_id") or ""
     verses = selected_verses(state)
@@ -216,31 +155,26 @@ def run_context_research(state: ResearchState) -> dict:
         "Call fetch_nuzool_reason for relevant verses."
     )
 
-    items: list[NuzoolEvidence] = []
-    tools_used: list[str] = []
-
-    if has_llm_credentials():
-        agent_out = run_researcher_agent(
-            role="context",
-            system_prompt=CONTEXT_SYSTEM,
-            user_message=user_msg,
-            response_format=ContextAgentSummary,
-            name="context_researcher",
+    if not has_llm_credentials():
+        return pack(
+            tid,
+            warnings=["context_researcher: no OPENAI_API_KEY — cannot run agent"],
+            errors=["context_researcher: no OPENAI_API_KEY — cannot run agent"],
         )
-        warnings.extend(agent_out.warnings)
-        tools_used = agent_out.tools_used
-        items, w2 = _items_from_tool_calls(agent_out.tool_calls)
-        warnings.extend(w2)
-        if not items:
-            warnings.append(
-                "context_researcher: agent empty — deterministic fallback"
-            )
-            items, w3 = _deterministic_nuzool(verses)
-            warnings.extend(w3)
-    else:
-        items, w = _deterministic_nuzool(verses)
-        warnings.extend(w)
-        tools_used = ["fetch_nuzool_reason"]
+
+    agent_out = run_researcher_agent(
+        role="context",
+        system_prompt=CONTEXT_SYSTEM,
+        user_message=user_msg,
+        response_format=ContextAgentSummary,
+        name="context_researcher",
+    )
+    warnings.extend(agent_out.warnings)
+    tools_used = agent_out.tools_used
+    items, w2 = _items_from_tool_calls(agent_out.tool_calls)
+    warnings.extend(w2)
+    if not items:
+        warnings.append("context_researcher: agent found nothing")
 
     counts = {
         "FOUND": sum(1 for n in items if n.status == "FOUND"),
