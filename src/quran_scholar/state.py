@@ -34,7 +34,7 @@ from quran_scholar.models import (
 class ResearchState(TypedDict, total=False):
     """Single shared graph state for Quran Scholar research."""
 
-    # Input (replace)
+    # Input (replace) — user_question is Modern Standard Arabic; language defaults to ar
     user_question: str
     language: str
 
@@ -95,7 +95,7 @@ def initial_research_state(
     language: str = "ar",
     max_research_iterations: int = 3,
 ) -> ResearchState:
-    """Build the starting state for a research run."""
+    """Build the starting state for a research run (Arabic question text)."""
     return ResearchState(
         user_question=user_question,
         language=language,

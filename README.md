@@ -4,6 +4,8 @@ A Multi-Agent Quranic Research and Tafsir System.
 
 Orchestrates LangGraph agents with [Tafsir MCP](https://tafsirmcp.netlify.app/) for verified Quranic text, classical tafsir, linguistic analysis, and asbab al-nuzool — so answers stay cited instead of hallucinated.
 
+**Input:** Users ask research questions in **Modern Standard Arabic** (e.g. `ما تفسير آية الكرسي؟`, `سورة ٢ آية ٢٥٥`, or `2:255`). The final report is Arabic; `language` defaults to `ar` in `initial_research_state`.
+
 ## Stack
 
 | Layer | Role |

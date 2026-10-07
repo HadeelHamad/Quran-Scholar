@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 
 from quran_scholar.agents.llm import get_llm
 from quran_scholar.models import (
@@ -11,10 +10,18 @@ from quran_scholar.models import (
     ResearchPlan,
     ResearchTask,
     TaskStatus,
-    VerseRef,
+)
+from quran_scholar.question import (
+    parse_verse_ref,
+    question_mentions_linguistic,
+    question_mentions_nuzool,
 )
 
 PLANNER_SYSTEM = """You are the Planner for Quran Scholar, a Quranic research system.
+
+Users write their questions in Modern Standard Arabic (الفصحى). Read the Arabic
+question carefully; infer verse-specific vs thematic intent from Arabic phrasing
+(e.g. آية الكرسي, سورة 2 آية 255, named mufassirin in Arabic).
 
 Your ONLY job is to produce a structured investigation plan (ResearchPlan).
 You must NOT answer the user's question, quote the Quran, summarize tafsir,
@@ -52,19 +59,8 @@ Keep tasks minimal:
 - Broad thematic question → quran_search, then parallelizable tafsir/linguistic/nuzool.
 
 Each task needs a unique id (e.g. t1_fetch_ayah), description, kind, and depends_on where order matters.
-Respond in the user's language for summaries/descriptions when language is ar; keep kind ids in English.
+Write question_summary, approach, and task descriptions in Arabic when language is ar; keep task kind ids in English.
 """
-
-
-def _parse_verse_ref(question: str) -> VerseRef | None:
-    """Detect surah:ayah patterns like 2:153 or 2:153-154."""
-    match = re.search(r"\b(\d{1,3})\s*:\s*(\d{1,3})\b", question)
-    if not match:
-        return None
-    surah, ayah = int(match.group(1)), int(match.group(2))
-    if 1 <= surah <= 114 and ayah >= 1:
-        return VerseRef(surah=surah, ayah=ayah)
-    return None
 
 
 def _detect_tafsir_sources(question: str) -> list[str]:
@@ -85,9 +81,9 @@ def _detect_tafsir_sources(question: str) -> list[str]:
 
 def _heuristic_plan(user_question: str, language: str) -> ResearchPlan:
     """Deterministic plan when LLM is unavailable (no API key or call failure)."""
-    verse = _parse_verse_ref(user_question)
+    verse = parse_verse_ref(user_question)
     named_sources = _detect_tafsir_sources(user_question)
-    q_lower = user_question.lower()
+    ar = language == "ar"
 
     if verse and named_sources:
         return ResearchPlan(
@@ -97,7 +93,11 @@ def _heuristic_plan(user_question: str, language: str) -> ResearchPlan:
             needs_tafsir_comparison=len(named_sources) > 1,
             needs_linguistic_analysis=False,
             needs_sabab_nuzool=False,
-            approach="Fetch the cited verse then tafsir from the requested source(s) only.",
+            approach=(
+                "جلب الآية ثم التفسير من المصدر المطلوب فقط."
+                if ar
+                else "Fetch the cited verse then tafsir from the requested source(s) only."
+            ),
             primary_verse=verse,
             target_tafsir_sources=named_sources,
             tasks=[
@@ -116,12 +116,8 @@ def _heuristic_plan(user_question: str, language: str) -> ResearchPlan:
         )
 
     if verse:
-        needs_ling = any(
-            w in q_lower for w in ("word", "root", "معنى", "جذر", "لغة")
-        ) or "word" in q_lower or "root" in q_lower
-        needs_nuzool = any(
-            w in q_lower for w in ("nuzool", "nuzul", "asbab", "سبب", "نزول", "reason")
-        )
+        needs_ling = question_mentions_linguistic(user_question)
+        needs_nuzool = question_mentions_nuzool(user_question)
         tasks = [
             ResearchTask(
                 id="t1_fetch_ayah",
@@ -204,9 +200,7 @@ def _heuristic_plan(user_question: str, language: str) -> ResearchPlan:
         ),
     ]
     needs_linguistic = True
-    needs_nuzool = any(
-        w in q_lower for w in ("nuzool", "nuzul", "asbab", "سبب", "نزول")
-    )
+    needs_nuzool = question_mentions_nuzool(user_question)
     if needs_nuzool:
         tasks.append(
             ResearchTask(
@@ -269,7 +263,7 @@ def plan_research(user_question: str, language: str = "ar") -> ResearchPlan:
     llm = get_llm()
     structured_llm = llm.with_structured_output(ResearchPlan)
     human = (
-        f"Language: {language}\n"
+        f"Language: {language} (user question is in Arabic when language is ar)\n"
         f"User question:\n{user_question}\n\n"
         "Output a minimal ResearchPlan only."
     )

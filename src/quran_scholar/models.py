@@ -85,7 +85,9 @@ class ResearchPlan(BaseModel):
     """Planner output: investigation plan only — never an answer to the user."""
 
     question_summary: str = Field(
-        description="What the user is asking, in one or two sentences (no tafsir content)"
+        description=(
+            "What the user is asking in Arabic (one or two sentences; no tafsir content)"
+        )
     )
     question_focus: QuestionFocus = Field(
         description="verse_specific if a surah:ayah is central; thematic if topic-based"

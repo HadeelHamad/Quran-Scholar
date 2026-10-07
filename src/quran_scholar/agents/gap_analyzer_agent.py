@@ -13,7 +13,7 @@ from quran_scholar.models import ResearchGap, ResearchPlan, ResearchTask, TaskSt
 from quran_scholar.state import ResearchState
 from quran_scholar.trace import trace, trace_lines
 
-SEMANTIC_SYSTEM = """You assess whether collected Quranic research evidence can answer the user question.
+SEMANTIC_SYSTEM = """You assess whether collected Quranic research evidence can answer the user's Arabic question.
 Only ADD gaps clearly still missing. Prefer empty additions if deterministic checks cover them.
 Do NOT answer the religious question itself."""
 

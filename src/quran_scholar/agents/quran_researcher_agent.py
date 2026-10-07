@@ -17,11 +17,13 @@ from quran_scholar.mcp.errors import MCPError
 from quran_scholar.mcp.parse import as_list, mcp_payload
 from quran_scholar.mcp.safe import mark_empty, safe_call_tool
 from quran_scholar.models import ResearchPlan, VerseEvidence, VerseRef
+from quran_scholar.question import normalize_question_text, parse_verse_ref
 from quran_scholar.state import ResearchState
 from quran_scholar.trace import trace
 
 SEARCH_CONCEPTS_SYSTEM = """You generate short Quran search queries for Tafsir MCP FTS5.
-Return 1–4 concise ARABIC keyword stems (no English; avoid leading ال when possible).
+The user's question is in Arabic. Return 1–4 concise ARABIC keyword stems taken from
+that question or its theme (no English; avoid leading ال when possible).
 Examples: صبر، يتيم، تقوى، رحمة — not full sentences.
 Do NOT answer the question. Do NOT invent verse numbers."""
 
@@ -32,19 +34,21 @@ class SearchConcepts(BaseModel):
     )
 
 
-# Heuristic English/Arabic theme → Arabic FTS stems
+# Arabic (and occasional transliteration) theme → FTS stems
 _THEME_STEMS: dict[str, list[str]] = {
-    "patience": ["صبر"],
-    "sabr": ["صبر"],
     "صبر": ["صبر"],
-    "orphan": ["يتيم", "يتامى"],
-    "يتيم": ["يتيم"],
-    "mercy": ["رحمة", "رحم"],
-    "رحمة": ["رحمة"],
-    "prayer": ["صلاة", "صلو"],
-    "صلاة": ["صلاة"],
-    "tawhid": ["الله", "اله"],
-    "forgive": ["غفر", "مغفرة"],
+    "صبرا": ["صبر"],
+    "يتيم": ["يتيم", "يتامى"],
+    "يتامى": ["يتيم"],
+    "رحمة": ["رحمة", "رحم"],
+    "رحم": ["رحمة"],
+    "صلاة": ["صلاة", "صلو"],
+    "صلو": ["صلاة"],
+    "تقوى": ["تقوى"],
+    "الكرسي": ["كرسي"],
+    "كرسي": ["كرسي"],
+    "غفر": ["غفر", "مغفرة"],
+    "مغفرة": ["غفر"],
 }
 
 
@@ -60,31 +64,21 @@ class VerseSelection(BaseModel):
     )
 
 
-EVALUATE_SYSTEM = """You evaluate Quran search candidates for relevance to the user question.
+EVALUATE_SYSTEM = """You evaluate Quran search candidates for relevance to the user's Arabic question.
 You receive a numbered list of candidate verses (search hits).
 Select ONLY verses that materially help answer the question.
 Do not select all hits by default. Prefer precision over recall (typically 1–8 verses).
 Return selected_indices (0-based). Do NOT invent verses not in the list."""
 
 
-def _parse_verse_ref(text: str) -> VerseRef | None:
-    match = re.search(r"\b(\d{1,3})\s*:\s*(\d{1,3})\b", text)
-    if not match:
-        return None
-    surah, ayah = int(match.group(1)), int(match.group(2))
-    if 1 <= surah <= 114 and ayah >= 1:
-        return VerseRef(surah=surah, ayah=ayah)
-    return None
-
-
 def _heuristic_concepts(question: str) -> list[str]:
-    q = question.lower()
+    q = normalize_question_text(question)
     stems: list[str] = []
     for key, values in _THEME_STEMS.items():
         if key in q or key in question:
             stems.extend(values)
-    # Any Arabic tokens in the question (length ≥ 2)
-    arabic_tokens = re.findall(r"[\u0600-\u06FF]{2,}", question)
+    # Arabic tokens in the question (length ≥ 2)
+    arabic_tokens = re.findall(r"[\u0600-\u06FF]{2,}", q)
     stems.extend(arabic_tokens)
     # Deduplicate preserve order
     seen: set[str] = set()
@@ -242,7 +236,7 @@ def run_quran_research(state: ResearchState) -> dict:
         with ScopedTafsirMCPClient("quran") as client:
             primary = plan.primary_verse if plan else None
             if primary is None:
-                primary = _parse_verse_ref(question)
+                primary = parse_verse_ref(question)
 
             task_kind = ""
             if plan and tid:
