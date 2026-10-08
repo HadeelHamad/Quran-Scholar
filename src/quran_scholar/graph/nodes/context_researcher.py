@@ -158,8 +158,8 @@ def run_context_research(state: ResearchState) -> dict:
     if not has_llm_credentials():
         return pack(
             tid,
-            warnings=["context_researcher: no OPENAI_API_KEY — cannot run agent"],
-            errors=["context_researcher: no OPENAI_API_KEY — cannot run agent"],
+            warnings=["context_researcher: no OPENROUTER_API_KEY — cannot run agent"],
+            errors=["context_researcher: no OPENROUTER_API_KEY — cannot run agent"],
         )
 
     agent_out = run_researcher_agent(

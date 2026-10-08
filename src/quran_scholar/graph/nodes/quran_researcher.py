@@ -220,8 +220,8 @@ def run_quran_research(state: ResearchState) -> dict:
     if not has_llm_credentials():
         return pack(
             tid,
-            warnings=["quran_researcher: no OPENAI_API_KEY — cannot run agent"],
-            errors=["quran_researcher: no OPENAI_API_KEY — cannot run agent"],
+            warnings=["quran_researcher: no OPENROUTER_API_KEY — cannot run agent"],
+            errors=["quran_researcher: no OPENROUTER_API_KEY — cannot run agent"],
         )
 
     primary = plan.primary_verse if plan else None

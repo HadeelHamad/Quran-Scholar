@@ -103,8 +103,8 @@ def run_report_generation(state: ResearchState) -> dict:
     if not has_llm_credentials():
         return {
             "research_complete": True,
-            "errors": ["report_generator: no OPENAI_API_KEY — cannot write answer"],
-            "warnings": ["report_generator: no OPENAI_API_KEY — cannot write answer"],
+            "errors": ["report_generator: no OPENROUTER_API_KEY — cannot write answer"],
+            "warnings": ["report_generator: no OPENROUTER_API_KEY — cannot write answer"],
         }
 
     payload = _pack_inputs(state)

@@ -38,7 +38,7 @@ class ResearcherAgentResult:
 
 
 def has_llm_credentials() -> bool:
-    key = os.getenv("OPENAI_API_KEY", "")
+    key = os.getenv("OPENROUTER_API_KEY", "")
     return bool(key) and not key.startswith("your_")
 
 
@@ -61,7 +61,7 @@ def run_researcher_agent(
         return ResearcherAgentResult(
             structured=None,
             tool_calls=[],
-            warnings=["mcp_agent: no OPENAI_API_KEY — cannot run create_agent"],
+            warnings=["mcp_agent: no OPENROUTER_API_KEY — cannot run create_agent"],
         )
 
     client, tools = get_tafsir_mcp_tools(role=role)

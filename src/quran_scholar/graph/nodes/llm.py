@@ -15,7 +15,7 @@ def get_llm(*, temperature: float = 0) -> ChatOpenAI:
     kwargs: dict = {
         "model": model,
         "temperature": temperature,
-        "api_key": os.getenv("OPENAI_API_KEY"),
+        "api_key": os.getenv("OPENROUTER_API_KEY"),
     }
     base_url = os.getenv("OPENROUTER_BASE_URL")
     if base_url:

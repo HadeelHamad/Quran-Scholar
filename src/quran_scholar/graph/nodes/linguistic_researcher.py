@@ -183,8 +183,8 @@ def run_linguistic_research(state: ResearchState) -> dict:
     if not has_llm_credentials():
         return pack(
             tid,
-            warnings=["linguistic_researcher: no OPENAI_API_KEY — cannot run agent"],
-            errors=["linguistic_researcher: no OPENAI_API_KEY — cannot run agent"],
+            warnings=["linguistic_researcher: no OPENROUTER_API_KEY — cannot run agent"],
+            errors=["linguistic_researcher: no OPENROUTER_API_KEY — cannot run agent"],
         )
 
     warnings: list[str] = []

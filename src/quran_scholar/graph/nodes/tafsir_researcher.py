@@ -165,8 +165,8 @@ def run_tafsir_research(state: ResearchState) -> dict:
     if not has_llm_credentials():
         return pack(
             tid,
-            warnings=["tafsir_researcher: no OPENAI_API_KEY — cannot run agent"],
-            errors=["tafsir_researcher: no OPENAI_API_KEY — cannot run agent"],
+            warnings=["tafsir_researcher: no OPENROUTER_API_KEY — cannot run agent"],
+            errors=["tafsir_researcher: no OPENROUTER_API_KEY — cannot run agent"],
         )
 
     verse_brief = [

@@ -2,6 +2,8 @@
 
 A Multi-Agent Quranic Research
 
+Submitted by: Hadeel Alhajri — academy: @SDAIAAcademy
+
 The Planner builds a minimal investigation plan; specialized researchers use
 [Tafsir MCP](https://tafsirmcp.netlify.app/) tools (as needed) for Quran text,
 search, surah/overview/stats, classical tafsir, linguistics, and asbab
@@ -53,7 +55,7 @@ Options: `uv run quran-scholar-web --port 8080 --reload`
 Requires Python **≥ 3.12** (Tafsir MCP dependency).
 
 ```bash
-cp .env.example .env   # add OPENAI_API_KEY (and optional LangSmith / MCP settings)
+cp .env.example .env   # add OPENROUTER_API_KEY (and optional LangSmith / MCP settings)
 uv sync
 ```
 
