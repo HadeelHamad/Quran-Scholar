@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quran Scholar — Team Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      themeVariables: {
+        primaryColor: "#e8f0ee",
+        primaryTextColor: "#1a2e28",
+        primaryBorderColor: "#2d5a4a",
+        lineColor: "#4a6b5e",
+        secondaryColor: "#f3ebe0",
+        tertiaryColor: "#faf7f2",
+        fontFamily: "IBM Plex Sans, sans-serif",
+      },
+    });
+  </script>
+  <style>
+    :root {
+      --ink: #1a2e28;
+      --ink-soft: #3d5249;
+      --teal: #2d5a4a;
+      --teal-mid: #3d7a64;
+      --teal-light: #e8f0ee;
+      --parchment: #faf7f2;
+      --parchment-deep: #f0e8dc;
+      --accent: #a67c52;
+      --accent-soft: #c4a574;
+      --white: #ffffff;
+      --danger: #8b3a3a;
+      --slide-pad: clamp(1.75rem, 4.5vw, 4rem);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--ink);
+      color: var(--ink);
+      font-family: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+      font-size: 18px;
+      line-height: 1.45;
+      overflow: hidden;
+    }
+
+    .deck {
+      height: 100%;
+      position: relative;
+      background: linear-gradient(160deg, #12201c 0%, #1a2e28 40%, #243830 100%);
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: var(--slide-pad);
+      padding-bottom: calc(var(--slide-pad) + 2.5rem);
+      background: linear-gradient(135deg, var(--parchment) 0%, var(--parchment-deep) 100%);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: none;
+      filter: none;
+      transition:
+        opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+        filter 0.5s ease,
+        visibility 0.5s;
+      overflow: hidden;
+      z-index: 0;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: none;
+      filter: none;
+      z-index: 2;
+    }
+
+    .slide.is-exiting { z-index: 1; }
+
+    /* --- tx: slide (horizontal) --- */
+    .slide.tx-slide.enter-fwd { transform: translateX(9%); }
+    .slide.tx-slide.enter-back { transform: translateX(-9%); }
+    .slide.tx-slide.exit-fwd { opacity: 0; transform: translateX(-8%); }
+    .slide.tx-slide.exit-back { opacity: 0; transform: translateX(8%); }
+
+    /* --- tx: rise (vertical) --- */
+    .slide.tx-rise.enter-fwd { transform: translateY(12%); }
+    .slide.tx-rise.enter-back { transform: translateY(-10%); }
+    .slide.tx-rise.exit-fwd { opacity: 0; transform: translateY(-8%); }
+    .slide.tx-rise.exit-back { opacity: 0; transform: translateY(8%); }
+
+    /* --- tx: zoom --- */
+    .slide.tx-zoom.enter-fwd { transform: scale(1.08); }
+    .slide.tx-zoom.enter-back { transform: scale(0.92); }
+    .slide.tx-zoom.exit-fwd { opacity: 0; transform: scale(0.94); }
+    .slide.tx-zoom.exit-back { opacity: 0; transform: scale(1.06); }
+
+    /* --- tx: fade (soft dissolve + blur) --- */
+    .slide.tx-fade.enter-fwd,
+    .slide.tx-fade.enter-back { filter: blur(8px); transform: scale(1.02); }
+    .slide.tx-fade.exit-fwd,
+    .slide.tx-fade.exit-back { opacity: 0; filter: blur(6px); transform: scale(0.98); }
+
+    /* --- tx: soft (gentle scale + lift) --- */
+    .slide.tx-soft.enter-fwd { transform: translateY(6%) scale(0.96); }
+    .slide.tx-soft.enter-back { transform: translateY(-4%) scale(0.97); }
+    .slide.tx-soft.exit-fwd { opacity: 0; transform: translateY(-4%) scale(1.02); }
+    .slide.tx-soft.exit-back { opacity: 0; transform: translateY(5%) scale(1.02); }
+
+    .slide > .content {
+      position: relative;
+      z-index: 2;
+      max-width: 1100px;
+      width: 100%;
+      margin-inline: auto;
+      opacity: 0;
+      transform: translateY(12px);
+      transition:
+        opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
+        transform 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.1s;
+    }
+
+    .slide.active > .content {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .slide.tx-rise.active > .content { transition-delay: 0.14s; }
+    .slide.tx-zoom.active > .content {
+      transform: translateY(0) scale(1);
+      transition-delay: 0.12s;
+    }
+    .slide.tx-fade.active > .content { transition-delay: 0.18s; }
+
+    .slide.is-exiting > .content {
+      opacity: 0;
+      transform: translateY(-6px);
+      transition-delay: 0s;
+    }
+
+    /* Islamic geometric ornaments */
+    .ornament {
+      position: absolute;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0;
+      color: var(--teal);
+      transition: opacity 0.7s ease 0.15s, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.1s;
+    }
+
+    .slide.active .ornament { opacity: 0.14; }
+    .slide.active .ornament.center { opacity: 0.07; }
+    .slide.active.title-slide .ornament { opacity: 0.22; }
+    .slide.active.title-slide .ornament.center { opacity: 0.1; }
+
+    .slide:not(.active) .ornament.tl,
+    .slide:not(.active) .ornament.tr,
+    .slide:not(.active) .ornament.bl,
+    .slide:not(.active) .ornament.br { transform: scale(0.92) rotate(-4deg); }
+    .slide:not(.active) .ornament.center {
+      transform: translate(-50%, -50%) scale(0.88) rotate(-6deg);
+    }
+    .slide.active .ornament.tl { transform: none; }
+    .slide.active .ornament.tr { transform: scaleX(-1); }
+    .slide.active .ornament.bl { transform: scaleY(-1); }
+    .slide.active .ornament.br { transform: scale(-1); }
+    .slide.active .ornament.center { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+
+    .ornament svg { display: block; width: 100%; height: 100%; }
+
+    .ornament.tl { top: -1.5rem; left: -1.5rem; width: 11rem; height: 11rem; }
+    .ornament.tr { top: -1.5rem; right: -1.5rem; width: 11rem; height: 11rem; }
+    .ornament.bl { bottom: 1.5rem; left: -1rem; width: 9rem; height: 9rem; }
+    .ornament.br { bottom: 1.5rem; right: -1rem; width: 9rem; height: 9rem; }
+    .ornament.center {
+      top: 50%; left: 50%;
+      width: min(70vw, 520px); height: min(70vw, 520px);
+      transform: translate(-50%, -50%) scale(0.92);
+    }
+
+    .slide.title-slide {
+      background: linear-gradient(145deg, #163029 0%, #1f3d34 45%, #2a4f42 100%);
+      color: var(--parchment);
+      text-align: center;
+      align-items: center;
+    }
+
+    .slide.title-slide > .content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .slide.title-slide .ornament { color: var(--accent-soft); }
+
+    .border-frame {
+      position: absolute;
+      inset: 0.85rem;
+      border: 1px solid rgba(45, 90, 74, 0.18);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .border-frame::before,
+    .border-frame::after {
+      content: "";
+      position: absolute;
+      width: 1.1rem;
+      height: 1.1rem;
+      border-color: var(--accent);
+      border-style: solid;
+    }
+
+    .border-frame::before {
+      top: -1px; left: -1px;
+      border-width: 2px 0 0 2px;
+    }
+
+    .border-frame::after {
+      bottom: -1px; right: -1px;
+      border-width: 0 2px 2px 0;
+    }
+
+    .title-slide .border-frame {
+      border-color: rgba(196, 165, 116, 0.25);
+    }
+
+    .eyebrow {
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--teal-mid);
+      margin-bottom: 0.65rem;
+    }
+
+    .title-slide .eyebrow { color: var(--accent-soft); }
+
+    h1 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(2.4rem, 5.5vw, 4rem);
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 0.65rem;
+    }
+
+    .title-slide h1 {
+      color: var(--parchment);
+      font-size: clamp(2.8rem, 6vw, 4.6rem);
+    }
+
+    h2 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(1.75rem, 3.5vw, 2.55rem);
+      line-height: 1.2;
+      color: var(--ink);
+      margin-bottom: 1rem;
+    }
+
+    h3 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--teal);
+      margin-bottom: 0.4rem;
+    }
+
+    .subtitle {
+      font-size: clamp(1.02rem, 2vw, 1.3rem);
+      color: var(--ink-soft);
+      max-width: 38em;
+    }
+
+    .title-slide .subtitle {
+      color: rgba(250, 247, 242, 0.78);
+      text-align: center;
+      margin-inline: auto;
+      max-width: 28em;
+      line-height: 1.55;
+    }
+
+    .title-slide .subtitle .ar {
+      display: block;
+      margin-top: 0.45rem;
+      font-size: 1.05em;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      margin: 1.25rem 0;
+      color: var(--accent);
+    }
+
+    .divider svg { width: 1.6rem; height: 1.6rem; }
+    .divider .line {
+      width: 3.5rem;
+      height: 1px;
+      background: currentColor;
+      opacity: 0.55;
+    }
+
+    .title-slide .divider { color: var(--accent-soft); }
+
+    .ar {
+      font-family: "IBM Plex Sans Arabic", "IBM Plex Sans", sans-serif;
+      font-weight: 500;
+      direction: rtl;
+      unicode-bidi: isolate;
+    }
+
+    .term { color: var(--teal); font-weight: 500; white-space: nowrap; }
+    .term .ar { color: var(--accent); margin-inline-start: 0.25em; }
+
+    ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+
+    ul li {
+      position: relative;
+      padding-inline-start: 1.35rem;
+      color: var(--ink-soft);
+      font-size: clamp(0.92rem, 1.45vw, 1.08rem);
+    }
+
+    ul li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.55em;
+      width: 0.4rem;
+      height: 0.4rem;
+      background: var(--teal-mid);
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.15rem 1.75rem;
+      margin-top: 0.4rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.9rem;
+      margin-top: 0.65rem;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(45, 90, 74, 0.14);
+      border-radius: 2px;
+      padding: 0.9rem 1.05rem;
+      position: relative;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 0.55rem; height: 0.55rem;
+      border-top: 2px solid var(--accent);
+      border-left: 2px solid var(--accent);
+    }
+
+    .card strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 0.3rem;
+      font-size: 0.95rem;
+    }
+
+    .card p, .card span {
+      color: var(--ink-soft);
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.9rem;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 0.3rem 0.7rem;
+      border: 1px solid rgba(45, 90, 74, 0.22);
+      border-radius: 2px;
+      font-size: 0.8rem;
+      color: var(--teal);
+      background: var(--teal-light);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-top: 0.35rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.45rem 0.65rem;
+      border-bottom: 1px solid rgba(45, 90, 74, 0.14);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--teal);
+      font-weight: 600;
+      font-size: 0.74rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    td { color: var(--ink-soft); }
+    td:first-child { color: var(--ink); font-weight: 500; white-space: nowrap; }
+
+    .code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.82em;
+      background: rgba(45, 90, 74, 0.08);
+      padding: 0.08em 0.32em;
+      border-radius: 2px;
+      color: var(--teal);
+    }
+
+    .slide.diagram-slide {
+      justify-content: center;
+      align-items: center;
+    }
+
+    .slide.diagram-slide > .content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: min(1200px, 96%);
+      width: 100%;
+    }
+
+    .slide.diagram-slide .eyebrow,
+    .slide.diagram-slide h2 {
+      text-align: center;
+      width: 100%;
+    }
+
+    .slide.diagram-slide h2 {
+      margin-bottom: 0.75rem;
+      font-size: clamp(1.6rem, 3vw, 2.3rem);
+    }
+
+    .arch {
+      display: grid;
+      grid-template-columns: 1.5fr auto 1fr auto 1.5fr;
+      gap: 0.6rem 0.7rem;
+      align-items: center;
+      justify-items: center;
+      margin: 0.25rem auto 0;
+      width: 100%;
+      max-width: 1280px;
+    }
+
+    .arch-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .arch-col.graph {
+      background: rgba(45, 90, 74, 0.05);
+      border: 1px dashed rgba(45, 90, 74, 0.28);
+      border-radius: 8px;
+      padding: 0.85rem 0.85rem 1rem;
+      width: 100%;
+    }
+
+    .arch-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--teal-mid);
+    }
+
+    .arch-arrow {
+      color: var(--accent);
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 600;
+      line-height: 1;
+      user-select: none;
+    }
+
+    /* Browser window illustration — large */
+    .illust-web {
+      width: 100%;
+      max-width: 32rem;
+      background: #fff;
+      border: 2px solid rgba(45, 90, 74, 0.35);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 28px rgba(26, 46, 40, 0.12);
+    }
+
+    .illust-web .chrome-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.55rem 0.65rem;
+      background: linear-gradient(180deg, #f3ebe0, #e8dfd0);
+      border-bottom: 1px solid rgba(45, 90, 74, 0.15);
+    }
+
+    .illust-web .dot {
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      background: var(--accent-soft);
+    }
+
+    .illust-web .url {
+      flex: 1;
+      font-size: 0.75rem;
+      color: var(--ink-soft);
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .illust-web .page {
+      padding: 0;
+      background: #1a1f24;
+      min-height: 0;
+    }
+
+    .illust-web .page img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: min(52vh, 420px);
+      object-fit: contain;
+      object-position: top center;
+    }
+
+    /* Server rack illustration — large */
+    .illust-server {
+      width: 100%;
+      max-width: 30rem;
+      background: linear-gradient(160deg, #243830, #1a2e28);
+      border: 2px solid rgba(196, 165, 116, 0.4);
+      border-radius: 10px;
+      padding: 1.85rem 1.5rem 1.65rem;
+      color: var(--parchment);
+      box-shadow: 0 8px 28px rgba(26, 46, 40, 0.22);
+      min-height: 20rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .illust-server strong {
+      display: block;
+      text-align: center;
+      font-size: 1.7rem;
+      margin-bottom: 1.2rem;
+      color: var(--accent-soft);
+    }
+
+    .illust-server .rack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .illust-server .bay {
+      height: 1.9rem;
+      border-radius: 4px;
+      background: rgba(250, 247, 242, 0.08);
+      border: 1px solid rgba(196, 165, 116, 0.28);
+      display: flex;
+      align-items: center;
+      padding: 0 0.75rem;
+      gap: 0.5rem;
+    }
+
+    .illust-server .led {
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 50%;
+      background: #6bcf8e;
+      box-shadow: 0 0 6px rgba(107, 207, 142, 0.75);
+    }
+
+    .illust-server .bay-line {
+      flex: 1;
+      height: 5px;
+      background: rgba(250, 247, 242, 0.22);
+      border-radius: 1px;
+    }
+
+    .illust-server .endpoint {
+      margin-top: 1.2rem;
+      font-size: 1rem;
+      text-align: center;
+      color: rgba(250, 247, 242, 0.7);
+      font-family: ui-monospace, Menlo, monospace;
+    }
+
+    /* Graph nodes — larger pills */
+    .g-flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      width: 100%;
+    }
+
+    .g-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+
+    .g-node {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--teal);
+      background: #fff;
+      border: 2px solid var(--teal-mid);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .g-node.manager {
+      background: var(--teal);
+      color: var(--parchment);
+      border-color: var(--teal);
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 0.5rem 1rem;
+    }
+
+    .g-node.control {
+      border-radius: 5px;
+      border-style: dashed;
+      color: var(--ink-soft);
+      border-color: rgba(45, 90, 74, 0.4);
+    }
+
+    .g-node.researcher {
+      border-radius: 7px;
+      background: var(--teal-light);
+    }
+
+    .g-edge {
+      font-size: 0.85rem;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .g-edge.muted { color: var(--ink-soft); opacity: 0.7; }
+
+    .arch-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.85rem 1.5rem;
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      color: var(--ink-soft);
+    }
+
+    .arch-legend i {
+      display: inline-block;
+      width: 0.95rem;
+      height: 0.6rem;
+      margin-inline-end: 0.35rem;
+      vertical-align: middle;
+      border: 1.5px solid var(--teal-mid);
+    }
+
+    .arch-legend .lg-node i { border-radius: 999px; background: var(--teal-light); }
+    .arch-legend .lg-web i {
+      border-radius: 2px;
+      background: linear-gradient(180deg, #f3ebe0 40%, #fff 40%);
+      width: 1.1rem;
+      height: 0.75rem;
+    }
+    .arch-legend .lg-server i {
+      border-radius: 2px;
+      background: #1a2e28;
+      border-color: var(--accent-soft);
+    }
+
+    @media (max-width: 900px) {
+      .arch {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+      }
+      .arch-arrow { transform: rotate(90deg); }
+      .illust-web, .illust-server { max-width: 34rem; }
+    }
+
+    .graph-diagram-wrap {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0.35rem auto 0;
+      background: #fff;
+      border: 1px solid rgba(45, 90, 74, 0.14);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      overflow: auto;
+    }
+
+    .graph-diagram-wrap .mermaid {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .graph-diagram-wrap .mermaid svg {
+      max-width: 100%;
+      height: auto !important;
+      max-height: min(68vh, 560px);
+    }
+
+    .slide.graph-slide {
+      justify-content: center;
+    }
+
+    .slide.graph-slide > .content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: min(1140px, 96%);
+    }
+
+    .slide.graph-slide .eyebrow,
+    .slide.graph-slide h2 {
+      text-align: center;
+      width: 100%;
+    }
+
+    .slide.graph-slide h2 { margin-bottom: 0.55rem; }
+
+    .edge-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem 1.1rem;
+      margin-top: 0.65rem;
+      font-size: 0.78rem;
+      color: var(--ink-soft);
+    }
+
+    .edge-legend strong { color: var(--teal); font-weight: 600; }
+
+    .mcp-shot {
+      margin-top: 0.85rem;
+      background: var(--white);
+      border: 1px solid rgba(45, 90, 74, 0.14);
+      border-radius: 2px;
+      padding: 0.85rem 1rem 0.65rem;
+      text-align: center;
+    }
+
+    .mcp-shot img {
+      max-width: min(100%, 520px);
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      object-fit: contain;
+    }
+
+    .mcp-shot figcaption {
+      margin-top: 0.55rem;
+      font-size: 0.78rem;
+      color: var(--ink-soft);
+    }
+
+    .mcp-shot figcaption a {
+      color: var(--teal);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .callout {
+      margin-top: 0.9rem;
+      padding: 0.75rem 1rem;
+      border-inline-start: 3px solid var(--accent);
+      background: rgba(166, 124, 82, 0.08);
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    .callout.guard {
+      border-inline-start-color: var(--danger);
+      background: rgba(139, 58, 58, 0.06);
+    }
+
+    .callout.parallel {
+      border-inline-start-color: var(--teal-mid);
+      background: var(--teal-light);
+    }
+
+    .flow-steps {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.85rem;
+      font-size: 0.82rem;
+    }
+
+    .flow-steps span {
+      padding: 0.35rem 0.6rem;
+      background: var(--teal-light);
+      color: var(--teal);
+      border-radius: 2px;
+      font-weight: 500;
+    }
+
+    .flow-steps .arrow { background: transparent; color: var(--accent); padding: 0; }
+
+    .meta {
+      margin-top: 1.5rem;
+      font-size: 0.95rem;
+      color: rgba(250, 247, 242, 0.65);
+    }
+
+    .meta strong { color: var(--accent-soft); font-weight: 500; }
+
+    .node-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid rgba(166, 124, 82, 0.35);
+      padding: 0.15rem 0.45rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .chrome {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.6rem 1.2rem;
+      background: rgba(18, 32, 28, 0.92);
+      backdrop-filter: blur(8px);
+      color: rgba(250, 247, 242, 0.7);
+      font-size: 0.76rem;
+    }
+
+    .progress-track {
+      flex: 1;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+      overflow: hidden;
+      max-width: 260px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--accent-soft);
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+
+    .nav-btns { display: flex; gap: 0.35rem; }
+
+    .nav-btns button {
+      appearance: none;
+      border: 1px solid rgba(250, 247, 242, 0.2);
+      background: transparent;
+      color: var(--parchment);
+      padding: 0.3rem 0.7rem;
+      border-radius: 2px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.76rem;
+    }
+
+    .nav-btns button:hover { background: rgba(255, 255, 255, 0.08); }
+    .nav-btns button:disabled { opacity: 0.35; cursor: default; }
+    .hint { opacity: 0.55; }
+
+    @media print {
+      html, body { overflow: visible; height: auto; background: white; }
+      .deck { background: none; height: auto; }
+      .chrome { display: none; }
+      .slide {
+        display: flex !important;
+        position: relative;
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: none !important;
+        page-break-after: always;
+        min-height: 100vh;
+      }
+      .slide > .content { opacity: 1 !important; transform: none !important; }
+      .ornament { opacity: 0.12 !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Reusable 8-point Islamic star (SVG symbol) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="star8" viewBox="0 0 100 100">
+      <g fill="none" stroke="currentColor" stroke-width="1.4">
+        <polygon points="50,4 58,28 82,22 72,42 96,50 72,58 82,78 58,72 50,96 42,72 18,78 28,58 4,50 28,42 18,22 42,28"/>
+        <polygon points="50,18 56,36 74,30 66,44 84,50 66,56 74,70 56,64 50,82 44,64 26,70 34,56 16,50 34,44 26,30 44,36"/>
+        <circle cx="50" cy="50" r="10"/>
+        <circle cx="50" cy="50" r="4"/>
+      </g>
+    </symbol>
+    <symbol id="rosette" viewBox="0 0 100 100">
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <circle cx="50" cy="50" r="46"/>
+        <circle cx="50" cy="50" r="34"/>
+        <path d="M50 4 L58 42 L96 50 L58 58 L50 96 L42 58 L4 50 L42 42 Z"/>
+        <path d="M18 18 L50 42 L82 18 L58 50 L82 82 L50 58 L18 82 L42 50 Z"/>
+        <circle cx="50" cy="50" r="8"/>
+      </g>
+    </symbol>
+    <symbol id="star-mini" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <polygon points="12,1 14.5,8 22,8.5 16,13.5 18,21 12,17 6,21 8,13.5 2,8.5 9.5,8"/>
+      </g>
+    </symbol>
+  </svg>
+
+  <div class="deck" id="deck">
+
+    <!-- 1 Title -->
+    <section class="slide title-slide active" data-tx="soft" data-slide="0">
+      <div class="border-frame"></div>
+      <div class="ornament center"><svg><use href="#rosette"/></svg></div>
+      <div class="ornament tl"><svg><use href="#star8"/></svg></div>
+      <div class="ornament tr"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <h1>Quran Scholar</h1>
+        <div class="divider">
+          <span class="line"></span>
+          <svg><use href="#star-mini"/></svg>
+          <span class="line"></span>
+        </div>
+        <p class="subtitle">A multi-agent system for grounded Quranic research<span class="ar">باحث قرآني متعدد الوكلاء</span></p>
+        <p class="meta"><strong>Hadeel Alhajri</strong> · SDAIA Academy</p>
+      </div>
+    </section>
+
+    <!-- 2 Purpose overview -->
+    <section class="slide" data-tx="rise" data-slide="1">
+      <div class="border-frame"></div>
+      <div class="ornament tl"><svg><use href="#star8"/></svg></div>
+      <div class="ornament br"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Overview</p>
+        <h2>Purpose of the project</h2>
+        <ul>
+          <li><strong>Help users ask Quran-related questions in Arabic</strong> and receive a cited scholarly-style answer — not a free-form LLM guess.</li>
+          <li>Cover lookup of <span class="term">ayat <span class="ar">آيات</span></span>, <span class="term">tafsir <span class="ar">تفسير</span></span>, linguistics, <span class="term">asbab al-nuzool <span class="ar">أسباب النزول</span></span>, and surah statistics.</li>
+          <li>Orchestrate specialized agents so each step retrieves real data via <strong>Tafsir MCP</strong>, then compose an Arabic report: <span class="ar">الإجابة</span> + <span class="ar">الأدلة</span>.</li>
+        </ul>
+        <div class="callout">Core mission: make Quranic AI answers <strong>retrievable, citable, and plan-driven</strong>.</div>
+      </div>
+    </section>
+
+    <!-- 3 Why it matters + Tafsir MCP source -->
+    <section class="slide" data-tx="slide" data-slide="2">
+      <div class="border-frame"></div>
+      <div class="ornament tr"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Overview</p>
+        <h2>Why it matters — grounded by Tafsir MCP</h2>
+        <div class="card" style="margin-bottom:0.75rem">
+          <strong>The risk</strong>
+          <p>General LLMs invent Quranic wording, verse numbers, and tafsir attributions with high confidence.</p>
+        </div>
+        <ul style="margin-top:0.75rem">
+          <li>Remote endpoint: <span class="code">https://mcp.tafsir.net/mcp</span> · role-scoped tools for researchers.</li>
+          <li>Data &amp; scientific stewardship: <strong>Tafsir Center for Qur’anic Studies</strong> · <span class="ar">مركز تفسير للدراسات القرآنية</span> (CC BY 4.0).</li>
+        </ul>
+        <figure class="mcp-shot">
+          <img src="tafsir_mcp_screenshot.png" alt="Tafsir Center for Qur’anic Studies — source of Tafsir MCP" />
+          <figcaption>
+            Screenshot / branding from the Tafsir MCP source —
+            <a href="https://tafsirmcp.netlify.app/" target="_blank" rel="noopener">tafsirmcp.netlify.app</a>
+            · endpoint <span class="code">mcp.tafsir.net/mcp</span>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 4 High-level how it works -->
+    <section class="slide" data-tx="fade" data-slide="3">
+      <div class="border-frame"></div>
+      <div class="ornament bl"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Overview</p>
+        <h2>How it works — at a glance</h2>
+        <div class="flow-steps">
+          <span>Arabic question</span><span class="arrow">→</span>
+          <span>Plan</span><span class="arrow">→</span>
+          <span>Research Manager</span><span class="arrow">→</span>
+          <span>Research (parallel)</span><span class="arrow">→</span>
+          <span>Gap check</span><span class="arrow">→</span>
+          <span>Arabic report</span>
+        </div>
+        <ul style="margin-top:1.1rem">
+          <li><strong>Web UI</strong> (FastAPI) accepts the question and invokes the LangGraph.</li>
+          <li><strong>Planner</strong> decides what evidence is needed — does not answer yet.</li>
+          <li><strong>Research Manager</strong> is the sole router: dispatches parallel researchers, loops via Gap check, then finishes.</li>
+          <li><strong>Researchers</strong> call Tafsir MCP tools until the plan is satisfied.</li>
+          <li><strong>Report Generator</strong> writes <span class="ar">الإجابة</span> from collected evidence only.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ========== SYSTEM ARCHITECTURE SECTION ========== -->
+
+    <!-- 5 System architecture — illustrated components + graph nodes -->
+    <section class="slide diagram-slide" data-tx="zoom" data-slide="5">
+      <div class="border-frame"></div>
+      <div class="content">
+        <p class="eyebrow">System architecture</p>
+        <h2>Full system diagram</h2>
+        <div class="arch">
+          <div class="arch-col">
+            <span class="arch-label">Interface</span>
+            <div class="illust-web" title="WebUI_FastAPI">
+              <div class="chrome-bar">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                <span class="url">127.0.0.1:8765</span>
+              </div>
+              <div class="page">
+                <img src="web_ui_screenshot.png" alt="Quran Scholar web interface — باحث قرآني" />
+              </div>
+            </div>
+          </div>
+
+          <div class="arch-arrow" aria-hidden="true">→</div>
+
+          <div class="arch-col graph">
+            <span class="arch-label">LangGraph nodes</span>
+            <div class="g-flow">
+              <span class="g-node control">START</span>
+              <span class="g-edge">↓</span>
+              <span class="g-node">Planner</span>
+              <span class="g-edge">↓</span>
+              <span class="g-node manager">Research Manager</span>
+              <span class="g-edge">↓ parallel</span>
+              <div class="g-row">
+                <span class="g-node researcher">Quran</span>
+                <span class="g-node researcher">Tafsir</span>
+                <span class="g-node researcher">Linguistic</span>
+                <span class="g-node researcher">Context</span>
+              </div>
+              <span class="g-edge">↓</span>
+              <span class="g-node">Gap Analyzer</span>
+              <span class="g-edge muted">↺ loop</span>
+              <div class="g-row">
+                <span class="g-node">Comparator</span>
+                <span class="g-node">Report</span>
+              </div>
+              <span class="g-edge">↓</span>
+              <span class="g-node control">END</span>
+            </div>
+          </div>
+
+          <div class="arch-arrow" aria-hidden="true">⇄</div>
+
+          <div class="arch-col">
+            <span class="arch-label">External server</span>
+            <div class="illust-server" title="TafsirMCP_HTTP">
+              <strong>Tafsir MCP</strong>
+              <div class="rack">
+                <div class="bay"><span class="led"></span><span class="bay-line"></span></div>
+                <div class="bay"><span class="led"></span><span class="bay-line"></span></div>
+                <div class="bay"><span class="led"></span><span class="bay-line"></span></div>
+              </div>
+              <div class="endpoint">mcp.tafsir.net/mcp</div>
+            </div>
+          </div>
+        </div>
+        <div class="arch-legend">
+          <span class="lg-web"><i></i> Web UI — browser interface</span>
+          <span class="lg-node"><i></i> Graph nodes — pills / chips</span>
+          <span class="lg-server"><i></i> Tafsir MCP — HTTP server</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 Nodes graph with tools, MCP, labeled conditional edges -->
+    <section class="slide graph-slide" data-tx="fade" data-slide="6">
+      <div class="border-frame"></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · LangGraph</p>
+        <h2>Nodes graph — tools, MCP &amp; conditional edges</h2>
+        <div class="graph-diagram-wrap">
+          <pre class="mermaid">
+%%{init: {"flowchart": {"useMaxWidth": true, "htmlLabels": true, "curve": "basis", "nodeSpacing": 18, "rankSpacing": 28}}}%%
+flowchart TD
+  START([START])
+  P[Planner]
+  RM[Research Manager]
+  QR[Quran Researcher]
+  TR[Tafsir Researcher]
+  LR[Linguistic Researcher]
+  CR[Context Researcher]
+  GA[Gap Analyzer]
+  TC[Tafsir Comparator]
+  RG[Report Generator]
+  MCP[(Tafsir MCP)]
+  QT[Quran Tools]
+  TT[Tafsir Tools]
+  LT[Linguistic Tools]
+  CT[Context Tools]
+  ENDNODE([END])
+
+  START --> P
+  P --> RM
+
+  RM -.-> QR
+  RM -.-> TR
+  RM -.-> LR
+  RM -.-> CR
+
+  QR --> QT
+  TR --> TT
+  LR --> LT
+  CR --> CT
+
+  QT --> MCP
+  TT --> MCP
+  LT --> MCP
+  CT --> MCP
+
+  MCP -.-> QR
+  MCP -.-> TR
+  MCP -.-> LR
+  MCP -.-> CR
+
+  QR --> GA
+  TR --> GA
+  LR --> GA
+  CR --> GA
+
+  GA -.->|"Insufficient evidence"| RM
+  GA -.->|"Sufficient evidence"| RM
+
+  RM -.->|"comparison"| TC
+  RM -.->|"finish"| RG
+
+  TC --> RG
+  RG --> ENDNODE
+
+  classDef agent fill:#e8f0ee,stroke:#2d5a4a,stroke-width:1.5px,color:#1a2e28
+  classDef tools fill:#f3ebe0,stroke:#a67c52,stroke-width:1.5px,color:#1a2e28
+  classDef mcp fill:#1a2e28,stroke:#c4a574,stroke-width:1.5px,color:#faf7f2
+  classDef terminal fill:#fff,stroke:#3d7a64,stroke-width:1.5px,color:#1a2e28
+  class P,RM,QR,TR,LR,CR,GA,TC,RG agent
+  class QT,TT,LT,CT tools
+  class MCP mcp
+  class START,ENDNODE terminal
+          </pre>
+        </div>
+        <div class="edge-legend">
+          <span><strong>Dashed</strong> = conditional / tool round-trip</span>
+          <span><strong>Solid</strong> = fixed graph edge</span>
+          <span><strong>Cylinder</strong> = Tafsir MCP server</span>
+          <span><strong>Tan boxes</strong> = role toolsets</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7 Node: Planner -->
+    <section class="slide" data-tx="slide" data-slide="8">
+      <div class="border-frame"></div>
+      <div class="ornament tl"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <span class="node-badge">Node 1 · no tools</span>
+        <h2>Planner</h2>
+        <ul>
+          <li>First node after <span class="code">START</span>. Builds a minimal <span class="code">ResearchPlan</span>.</li>
+          <li><strong>Does not answer</strong> the user — only decides what evidence types and tasks are needed.</li>
+          <li>Sets flags: tafsir comparison, linguistic analysis, <span class="term">sabab nuzool <span class="ar">سبب نزول</span></span>.</li>
+          <li>Tasks map later to researchers (<span class="code">fetch_ayah</span>, <span class="code">tafsir_fetch</span>, <span class="code">linguistic</span>, <span class="code">nuzool</span>, …).</li>
+        </ul>
+        <div class="callout">Plan-first principle starts here: investigate before generating an answer.</div>
+      </div>
+    </section>
+
+    <!-- 10 Node: Research Manager -->
+    <section class="slide" data-tx="soft" data-slide="9">
+      <div class="border-frame"></div>
+      <div class="ornament tr"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <span class="node-badge">Node 2 · sole router · no tools</span>
+        <h2>Research Manager</h2>
+        <ul>
+          <li>The <strong>only router</strong> for next work after planning.</li>
+          <li>Collects dependency-ready tasks → maps kind → researcher actions.</li>
+          <li>Can dispatch a <strong>parallel wave</strong> of multiple researchers in one decision.</li>
+          <li>Gates specialty research until <span class="code">selected_verses</span> exist.</li>
+          <li>Chooses: research wave · gap analysis · optional comparison · finish (report).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 11 Node: Quran Researcher -->
+    <section class="slide" data-tx="rise" data-slide="10">
+      <div class="border-frame"></div>
+      <div class="ornament bl"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <span class="node-badge">Node 3 · MCP tools</span>
+        <h2>Quran Researcher</h2>
+        <ul>
+          <li>Retrieves Quran text and meta via MCP — not from model memory.</li>
+          <li>Tools: <span class="code">search_quran_text</span>, <span class="code">fetch_ayah</span>, <span class="code">fetch_surah_info</span>, overview, statistics.</li>
+          <li>Fills <span class="code">discovered_verses</span> / <span class="code">selected_verses</span> and citation evidence.</li>
+          <li>Always edges to <strong>Gap Analyzer</strong> after running.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 12 Node: Tafsir Researcher -->
+    <section class="slide" data-tx="slide" data-slide="11">
+      <div class="border-frame"></div>
+      <div class="ornament br"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <span class="node-badge">Node 4 · MCP tools</span>
+        <h2>Tafsir Researcher </h2>
+        <ul>
+          <li>Runs <strong>only when the plan requires</strong> classical commentary.</li>
+          <li>Tools: <span class="code">fetch_tafsir</span>, <span class="code">search_in_tafsir</span>, list sources for an <span class="term">ayah <span class="ar">آية</span></span>.</li>
+          <li>Produces attributed <span class="code">TafsirEvidence</span> (source id, author, text).</li>
+          <li>Waits for selected verses before the Manager dispatches it.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 13 Linguistic + Context -->
+    <section class="slide" data-tx="fade" data-slide="12">
+      <div class="border-frame"></div>
+      <div class="ornament tl"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <h2>Linguistic &amp; Context researchers</h2>
+        <div class="grid-2">
+          <div class="card">
+            <strong>Linguistic Researcher · Node 5</strong>
+            <p>Word/root study when planned. Tools: <span class="code">analyze_word</span>, <span class="code">find_root_occurrences</span>, <span class="code">get_root_stats</span>.</p>
+          </div>
+          <div class="card">
+            <strong>Context Researcher · Node 6</strong>
+            <p><span class="term">Asbab al-nuzool <span class="ar">أسباب النزول</span></span> when planned. Tools: <span class="code">fetch_nuzool_reason</span>, source lists.</p>
+          </div>
+        </div>
+        <div class="callout">Both are MCP tool agents; both join at Gap Analyzer; both are verse-gated by the Manager.</div>
+      </div>
+    </section>
+
+    <!-- 14 Gap Analyzer -->
+    <section class="slide" data-tx="soft" data-slide="13">
+      <div class="border-frame"></div>
+      <div class="ornament tr"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <span class="node-badge">Node 7 · deterministic · no tools</span>
+        <h2>Gap Analyzer</h2>
+        <ul>
+          <li>Compares the <strong>plan</strong> (required evidence types / flags) to what was collected.</li>
+          <li>May append recommended tasks into the plan if something is missing.</li>
+          <li>Sets <span class="code">gap_status</span> (<span class="code">insufficient</span> / <span class="code">sufficient</span>) and iteration counters.</li>
+          <li><strong>Always returns to Research Manager</strong> — Manager decides loop / compare / finish.</li>
+        </ul>
+        <div class="callout">Sufficiency is code-checked — not “the LLM feels done.”</div>
+      </div>
+    </section>
+
+    <!-- 15 Comparator + Report -->
+    <section class="slide" data-tx="rise" data-slide="14">
+      <div class="border-frame"></div>
+      <div class="ornament bl"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · nodes</p>
+        <h2>Tafsir Comparator &amp; Report Generator</h2>
+        <div class="grid-2">
+          <div class="card">
+            <strong>Tafsir Comparator · Node 8</strong>
+            <p>Optional. Only if Manager chooses comparison. Contrasts mufassirs using <em>collected</em> tafsir evidence.</p>
+          </div>
+          <div class="card">
+            <strong>Report Generator · Node 9</strong>
+            <p>Final Arabic <span class="ar">الإجابة</span> + <span class="ar">الأدلة</span>. Must cite exact evidence labels — then <span class="code">END</span>.</p>
+          </div>
+        </div>
+        <div class="flow-steps">
+          <span>Planner</span><span class="arrow">→</span>
+          <span>Manager</span><span class="arrow">⇄</span>
+          <span>Researchers / Gap</span><span class="arrow">→</span>
+          <span>Comparator?</span><span class="arrow">→</span>
+          <span>Report</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 16 MCP component detail -->
+    <section class="slide" data-tx="zoom" data-slide="15">
+      <div class="border-frame"></div>
+      <div class="ornament br"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">System architecture · MCP</p>
+        <h2>Tafsir MCP component</h2>
+        <ul>
+          <li>Remote Streamable HTTP endpoint (default <span class="code">https://mcp.tafsir.net/mcp</span>).</li>
+          <li>Wrapped as LangChain tools in <span class="code">mcp/client.py</span>.</li>
+          <li>Role toolsets in <span class="code">mcp/toolsets.py</span> — each researcher sees only its tools.</li>
+          <li><span class="code">assert_tool_allowed</span> enforces boundaries at call time.</li>
+        </ul>
+        <div class="pill-row">
+          <span class="pill">quran toolset</span>
+          <span class="pill">tafsir toolset</span>
+          <span class="pill">linguistic toolset</span>
+          <span class="pill">context toolset</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== DESIGN CONSIDERATIONS ========== -->
+
+    <!-- 17 Section divider: considerations -->
+    <section class="slide title-slide" data-tx="fade" data-slide="16">
+      <div class="border-frame"></div>
+      <div class="ornament center"><svg><use href="#star8"/></svg></div>
+      <div class="ornament tl"><svg><use href="#rosette"/></svg></div>
+      <div class="ornament tr"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Design considerations</p>
+        <h1 style="font-size:clamp(2rem,4.5vw,3.2rem)">How we keep research<br/>grounded &amp; efficient</h1>
+        <div class="divider">
+          <span class="line"></span>
+          <svg><use href="#star-mini"/></svg>
+          <span class="line"></span>
+        </div>
+        <p class="subtitle">Plan first · Parallel execution · Hallucination guards</p>
+      </div>
+    </section>
+
+    <!-- 18 Plan first -->
+    <section class="slide" data-tx="slide" data-slide="17">
+      <div class="border-frame"></div>
+      <div class="ornament tl"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Consideration 1</p>
+        <h2>Plan first — then execute</h2>
+        <ul>
+          <li>The Planner commits to a <span class="code">ResearchPlan</span> before any researcher runs.</li>
+          <li>Graph wiring: <span class="code">START → planner → research_manager</span> — no skip path.</li>
+          <li>Minimal tasks only — avoid fetching tafsir when the question does not need interpretation.</li>
+          <li>Gap Analyzer later checks that same plan — the contract for “done.”</li>
+        </ul>
+        <div class="callout">Planning separates <em>what to investigate</em> from <em>generating an answer</em> — reducing premature hallucination.</div>
+      </div>
+    </section>
+
+    <!-- 19 Parallel execution -->
+    <section class="slide" data-tx="rise" data-slide="18">
+      <div class="border-frame"></div>
+      <div class="ornament tr"><svg><use href="#rosette"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Consideration 2</p>
+        <h2>Parallel execution</h2>
+        <ul>
+          <li>Manager emits multiple <span class="code">ResearchDispatch</span> entries in one wave.</li>
+          <li><span class="code">route_after_research_manager</span> returns a <strong>list of nodes</strong> → LangGraph fan-out.</li>
+          <li>Quran / Tafsir / Linguistic / Context can run together when dependencies allow.</li>
+          <li>All join at Gap Analyzer, then loop back to Manager.</li>
+        </ul>
+        <div class="callout parallel">Parallel waves cut latency when several evidence types are needed — with one join point for sufficiency.</div>
+      </div>
+    </section>
+
+    <!-- 20 Hallucination guards -->
+    <section class="slide" data-tx="soft" data-slide="19">
+      <div class="border-frame"></div>
+      <div class="ornament bl"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <p class="eyebrow">Consideration 3</p>
+        <h2>Hallucination guard mechanisms</h2>
+        <ul>
+          <li><strong>Tool-grounded evidence</strong> — findings from MCP results, not free-form recall.</li>
+          <li><strong>Role-scoped tools</strong> — researchers cannot call out-of-role tools.</li>
+          <li><strong>Citation-bound report</strong> — exact citation labels in <span class="ar">الأدلة</span>.</li>
+          <li><strong>Deterministic gap check</strong> — plan vs evidence in code.</li>
+          <li><strong>Append-only evidence</strong> + max iterations (default 3).</li>
+          <li><strong>Grounded comparator</strong> — uses collected tafsir only.</li>
+        </ul>
+        <div class="callout guard">Layered guards: retrieve → scope → verify → cite.</div>
+      </div>
+    </section>
+
+    <!-- 21 Closing -->
+    <section class="slide title-slide" data-tx="zoom" data-slide="21">
+      <div class="border-frame"></div>
+      <div class="ornament center"><svg><use href="#rosette"/></svg></div>
+      <div class="ornament tl"><svg><use href="#star8"/></svg></div>
+      <div class="ornament tr"><svg><use href="#star8"/></svg></div>
+      <div class="content">
+        <h1>Thank you</h1>
+        <div class="divider">
+          <span class="line"></span>
+          <svg><use href="#star-mini"/></svg>
+          <span class="line"></span>
+        </div>
+        <p class="subtitle"><span class="ar">والحمد لله رب العالمين</span></p>
+        <p class="meta"> Hadeel Alhajri <br/></p>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="chrome">
+    <span id="counter">1 / 22</span>
+    <div class="progress-track"><div class="progress-bar" id="progress"></div></div>
+    <span class="hint">← → · Space</span>
+    <div class="nav-btns">
+      <button type="button" id="prev">Prev</button>
+      <button type="button" id="next">Next</button>
+    </div>
+  </div>
+
+  <script>
+    const slides = [...document.querySelectorAll(".slide")];
+    let i = 0;
+    let busy = false;
+    const DURATION = 560;
+    const TX_CLASSES = ["tx-slide", "tx-rise", "tx-zoom", "tx-fade", "tx-soft"];
+    const MOTION = ["enter-fwd", "enter-back", "exit-fwd", "exit-back", "is-exiting"];
+
+    function clearMotion(el) {
+      el.classList.remove(...MOTION, ...TX_CLASSES);
+    }
+
+    function updateChrome() {
+      document.getElementById("counter").textContent = `${i + 1} / ${slides.length}`;
+      document.getElementById("progress").style.width = `${((i + 1) / slides.length) * 100}%`;
+      document.getElementById("prev").disabled = i === 0 || busy;
+      document.getElementById("next").disabled = i === slides.length - 1 || busy;
+      history.replaceState(null, "", `#${i + 1}`);
+    }
+
+    function show(n, { animate = true } = {}) {
+      const next = Math.max(0, Math.min(slides.length - 1, n));
+      if (next === i && animate) return;
+      if (busy && animate) return;
+
+      const prev = i;
+      const dir = next > prev ? 1 : -1;
+      const from = slides[prev];
+      const to = slides[next];
+      const tx = to.dataset.tx || "slide";
+
+      if (!animate || from === to) {
+        slides.forEach((s) => {
+          clearMotion(s);
+          s.classList.remove("active");
+        });
+        to.classList.add("active", `tx-${tx}`);
+        i = next;
+        updateChrome();
+        return;
+      }
+
+      busy = true;
+      updateChrome();
+
+      clearMotion(from);
+      from.classList.add(`tx-${tx}`, "is-exiting", dir > 0 ? "exit-fwd" : "exit-back");
+      from.classList.remove("active");
+
+      clearMotion(to);
+      to.classList.add(`tx-${tx}`, dir > 0 ? "enter-fwd" : "enter-back");
+      void to.offsetWidth;
+      to.classList.add("active");
+      to.classList.remove("enter-fwd", "enter-back");
+
+      i = next;
+      updateChrome();
+
+      window.setTimeout(() => {
+        clearMotion(from);
+        busy = false;
+        updateChrome();
+      }, DURATION);
+    }
+
+    document.getElementById("prev").addEventListener("click", (e) => {
+      e.stopPropagation();
+      show(i - 1);
+    });
+    document.getElementById("next").addEventListener("click", (e) => {
+      e.stopPropagation();
+      show(i + 1);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(e.key)) {
+        e.preventDefault();
+        show(i + 1);
+      } else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(e.key)) {
+        e.preventDefault();
+        show(i - 1);
+      } else if (e.key === "Home") show(0);
+      else if (e.key === "End") show(slides.length - 1);
+    });
+
+    document.getElementById("deck").addEventListener("click", (e) => {
+      if (e.target.closest("a, button, .mermaid, .chrome")) return;
+      show(e.clientX < window.innerWidth / 2 ? i - 1 : i + 1);
+    });
+
+    const hash = parseInt(location.hash.slice(1), 10);
+    show(Number.isFinite(hash) && hash >= 1 ? hash - 1 : 0, { animate: false });
+  </script>
+</body>
+</html>

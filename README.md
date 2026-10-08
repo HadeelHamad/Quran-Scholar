@@ -103,6 +103,8 @@ Tools are wrapped in `src/quran_scholar/mcp/client.py` as LangChain tools
 
 Wired in `src/quran_scholar/graph/builder.py`.
 
+Team slide deck (plan-first architecture, parallel research, hallucination guards): [docs/presentation.html](docs/presentation.html)
+
 Compiled graph diagram:
 
 ![Quran Scholar LangGraph](docs/quran_scholar_graph.png)
