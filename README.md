@@ -37,19 +37,6 @@ src/quran_scholar/
 └── web/            # FastAPI UI (Arabic question → report)
 ```
 
-## Web UI
-
-Run the local server (loads `.env`, compiles the graph once at startup):
-
-```bash
-uv sync
-uv run quran-scholar-web
-```
-
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765), type your question in Arabic, and submit. The page shows the final Arabic report and any warnings.
-
-Options: `uv run quran-scholar-web --port 8080 --reload`
-
 ## Setup
 
 Requires Python **≥ 3.12** (Tafsir MCP dependency).
@@ -58,6 +45,18 @@ Requires Python **≥ 3.12** (Tafsir MCP dependency).
 cp .env.example .env   # add OPENROUTER_API_KEY (and optional LangSmith / MCP settings)
 uv sync
 ```
+
+## Web UI
+
+Run the local server (loads `.env`, compiles the graph once at startup):
+
+```bash
+uv run quran-scholar-web
+```
+
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765), type your question in Arabic, and submit. The page shows the final Arabic report and any warnings.
+
+Options: `uv run quran-scholar-web --port 8080 --reload`
 
 ### Tafsir MCP
 
