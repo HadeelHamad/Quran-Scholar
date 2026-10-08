@@ -8,7 +8,6 @@ from quran_scholar.models import (
     ResearchDispatch,
     ResearchPlan,
     ResearchTask,
-    TaskStatus,
 )
 from quran_scholar.state import ResearchState
 
@@ -56,7 +55,7 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
     by_action: dict[str, ResearchTask] = {}
     if plan:
         for task in plan.tasks:
-            if task.id in done or task.status == TaskStatus.SKIPPED:
+            if task.id in done:
                 continue
             if not all(dep in done for dep in task.depends_on):
                 continue
@@ -86,7 +85,6 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
         plan
         and any(
             t.id not in done
-            and t.status != TaskStatus.SKIPPED
             and KIND_TO_ACTION.get(t.kind) in RESEARCHER_ACTIONS
             for t in plan.tasks
         )

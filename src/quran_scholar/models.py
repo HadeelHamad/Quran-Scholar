@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
-
-class TaskStatus(str, Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    DONE = "done"
-    SKIPPED = "skipped"
 
 
 class VerseRef(BaseModel):
@@ -32,7 +24,6 @@ class ResearchTask(BaseModel):
             "(maps to graph researchers)"
         )
     )
-    status: TaskStatus = TaskStatus.PENDING
     depends_on: list[str] = Field(default_factory=list)
     notes: str | None = None
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from quran_scholar.models import ResearchGap, ResearchPlan, ResearchTask, TaskStatus
+from quran_scholar.models import ResearchGap, ResearchPlan, ResearchTask
 from quran_scholar.state import ResearchState
 
 
@@ -25,11 +25,7 @@ def run_gap_analysis(state: ResearchState) -> dict[str, Any]:
             recommended_tasks=[],
         )
     else:
-        pending = [
-            t
-            for t in plan.tasks
-            if t.id not in done and t.status != TaskStatus.SKIPPED
-        ]
+        pending = [t for t in plan.tasks if t.id not in done]
         types = plan.required_evidence_types or []
         has_quran = bool(
             state.get("selected_verses")
