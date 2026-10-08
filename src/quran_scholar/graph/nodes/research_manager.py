@@ -92,11 +92,18 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
     iteration = int(state.get("research_iteration") or 0)
     max_iters = int(state.get("max_research_iterations") or 3)
     gaps = list(state.get("unresolved_gaps") or [])
+    at_limit = bool(state.get("research_complete")) or iteration >= max_iters
 
-    if pending_research:
-        return decision("gap_analysis", "Researcher tasks still pending.")
-    if gaps and iteration < max_iters:
-        return decision("gap_analysis", "Unresolved gaps remain.")
+    # Pending/blocked tasks must not bypass the iteration cap — otherwise
+    # Manager ↔ Gap loops forever and hits LangGraph recursion_limit.
+    if (pending_research or gaps) and not at_limit:
+        reason = (
+            "Researcher tasks still pending."
+            if pending_research
+            else "Unresolved gaps remain."
+        )
+        return decision("gap_analysis", reason)
+
     if plan and plan.needs_tafsir_comparison and not state.get("tafsir_comparisons"):
         return decision("comparison", "Run optional tafsir comparison.")
     return decision("finish", "Research complete — write the answer.")
@@ -105,9 +112,14 @@ def decide_next_action(state: ResearchState) -> ResearchDecision:
 def research_manager_node(state: ResearchState) -> dict:
     plan = state.get("research_plan")
     if plan is None:
+        # Finish instead of routing to gap with a null decision (infinite loop).
+        decision = ResearchDecision(
+            action="finish",
+            reasoning="Missing research_plan — finish with errors.",
+        )
         return {
             "current_task_id": "",
-            "research_decision": None,
+            "research_decision": decision,
             "warnings": ["research_manager: missing research_plan"],
             "errors": ["research_manager: cannot decide without research_plan"],
         }

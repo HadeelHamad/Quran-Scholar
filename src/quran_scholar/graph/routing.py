@@ -20,7 +20,8 @@ def route_after_research_manager(state: ResearchState) -> str | list[str]:
     """Only the Research Manager chooses the next node(s)."""
     decision = state.get("research_decision")
     if not isinstance(decision, ResearchDecision):
-        return "gap_analyzer"
+        # Safe default: never bounce to gap without a decision (recursion risk).
+        return "report_generator"
     if decision.dispatches:
         nodes: list[str] = []
         for d in decision.dispatches:
@@ -31,7 +32,7 @@ def route_after_research_manager(state: ResearchState) -> str | list[str]:
             return nodes
         if len(nodes) == 1:
             return nodes[0]
-    return ROUTES.get(decision.action, "gap_analyzer")
+    return ROUTES.get(decision.action, "report_generator")
 
 
 def task_id_for_action(state: ResearchState, action: str) -> str:
